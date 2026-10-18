@@ -1,0 +1,2715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Car Z</title>
+  <style>
+:root { --edge: rgba(255,255,255,.88); --fill: rgba(255,255,255,.07); --ink: #fff; }
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; background: #10151b; font-family: Arial, Helvetica, sans-serif; color: var(--ink); }
+canvas { display: block; touch-action: none; }
+
+/* Transparent "glass" HUD: see-through fill, bright outline with a thin dark ring so edges stay clear on any background */
+#gauge, #help, #reset, #settings-btn, #settings-panel, .touch-btn {
+  background: var(--fill);
+  border: 2px solid var(--edge);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.2);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+#speed, #unit, #gear, #drift-indicator, #help, #status, #reset, .set-title, #settings-panel span { text-shadow: 0 1px 3px rgba(0,0,0,.85); }
+
+#hud { position: fixed; top: 14px; right: 14px; z-index: 10; pointer-events: none; }
+#help { position: fixed; left: 20px; bottom: 20px; z-index: 10; padding: 12px 16px; border-radius: 12px; color: #fff; font-size: 12px; line-height: 1.9; pointer-events: none; }
+.key { display: inline-block; min-width: 25px; padding: 1px 6px; margin-right: 4px; text-align: center; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.7); border-radius: 4px; color: white; font-weight: bold; text-shadow: none; }
+#drift-score { position: fixed; left: 20px; top: 46px; color: #ffbd59; font-size: 16px; font-weight: 800; letter-spacing: 2px; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.85); z-index: 10; }
+#drift-score .mult { color: #28e6c8; }
+#reset { position: fixed; right: 20px; bottom: 20px; z-index: 10; color: white; border-radius: 12px; padding: 12px 16px; font-size: 12px; font-weight: bold; cursor: pointer; }
+#reset:hover { background: rgba(255,255,255,.2); }
+
+/* Touch controls */
+#mobile-controls { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; user-select: none; -webkit-user-select: none; touch-action: none; }
+.touch-cluster { position: absolute; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 14px; pointer-events: auto; }
+#steering-controls { left: 16px; }
+#pedal-controls { right: 16px; }
+.touch-btn { color: #fff; display: flex; align-items: center; justify-content: center; padding: 0; -webkit-tap-highlight-color: transparent; touch-action: none; user-select: none; -webkit-user-select: none; transition: background .08s, transform .08s; }
+.touch-btn svg { width: 56%; height: 56%; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 2px rgba(0,0,0,.7)); pointer-events: none; }
+.touch-btn.round { width: 66px; height: 66px; border-radius: 50%; }
+.touch-btn.pedal.gas { width: 70px; height: 124px; border-radius: 18px; }
+.touch-btn.pedal.brake { width: 62px; height: 86px; border-radius: 16px; }
+.touch-btn.active, .touch-btn:active { background: rgba(255,255,255,.3); transform: scale(.96); }
+.touch-btn.gas.active { background: rgba(80,220,255,.35); }
+.touch-btn.brake.active { background: rgba(255,90,90,.35); }
+#handbrake-btn { position: absolute; left: 26px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 84px); width: 52px; height: 52px; pointer-events: auto; }
+#handbrake-btn.active { background: rgba(255,150,60,.4); }
+
+/* Settings */
+#settings-btn { position: fixed; left: 12px; top: 50%; transform: translateY(-50%); z-index: 30; width: 46px; height: 46px; border-radius: 50%; color: #fff; font-size: 22px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+#settings-panel { position: fixed; left: 68px; top: 50%; transform: translateY(-50%); z-index: 30; width: 264px; max-width: calc(100vw - 84px); padding: 14px; border-radius: 14px; background: rgba(10,15,20,.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: none; font-size: 13px; }
+#settings-panel.open { display: block; }
+.set-title { font-weight: 800; letter-spacing: 2px; font-size: 11px; color: #e3ebf2; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; }
+.toggle { min-width: 54px; padding: 8px 10px; border-radius: 10px; border: 2px solid var(--edge); background: rgba(255,255,255,.08); color: #fff; font-weight: 800; font-size: 12px; cursor: pointer; touch-action: manipulation; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+.toggle.on { background: rgba(80,220,255,.35); }
+#cam-zoom { width: 100%; }
+#fs-note { font-size: 11px; color: #ffbd59; min-height: 1em; margin-top: 4px; }
+
+@media (pointer: coarse), (max-width: 800px) {
+  #mobile-controls { display: block; }
+  #help { display: none; }
+  #reset { bottom: auto; top: 158px; right: 12px; }
+  #status { display: none; }
+  #steering-controls { left: 12px; }
+  #pedal-controls { right: 12px; }
+}
+@media (max-width: 600px) {
+  #hud { top: 10px; right: 10px; }
+  #gauge { width: 134px; height: 134px; }
+  #reset { top: 150px; right: 12px; padding: 9px 12px; }
+  .touch-btn.round { width: 58px; height: 58px; }
+  .touch-btn.pedal.gas { width: 62px; height: 108px; }
+  .touch-btn.pedal.brake { width: 56px; height: 76px; }
+  .touch-cluster { gap: 10px; }
+  #handbrake-btn { width: 48px; height: 48px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 74px); left: 22px; }
+}
+
+/* Round speedometer: red progress ring + needle, teal drift meter along the bottom */
+#gauge { width: 176px; height: 176px; display: block; border-radius: 50%; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); overflow: visible; }
+#gauge .g-shadow { fill: none; stroke: rgba(0,0,0,.4); stroke-width: 1.5; }
+#gauge .g-face { fill: rgba(255,255,255,.05); stroke: rgba(255,255,255,.88); stroke-width: 2; }
+#gauge .g-track { fill: none; stroke: rgba(255,59,74,.28); stroke-width: 5; stroke-linecap: round; }
+#gauge .g-drift-track { fill: none; stroke: rgba(40,230,200,.25); stroke-width: 5; stroke-linecap: round; }
+#gauge .g-progress { fill: none; stroke: #ff3b4a; stroke-width: 5; stroke-linecap: round; }
+#gauge .g-drift { fill: none; stroke: #28e6c8; stroke-width: 5; stroke-linecap: round; }
+#gauge .g-tick { stroke: rgba(255,255,255,.85); stroke-width: 1.2; }
+#gauge .g-tick.major { stroke-width: 2.2; }
+#gauge .g-box { fill: rgba(255,255,255,.08); stroke: rgba(255,255,255,.85); stroke-width: 1.5; }
+#gauge .g-needle { stroke: #ff3b4a; stroke-width: 3; stroke-linecap: round; filter: drop-shadow(0 0 2px rgba(0,0,0,.7)); }
+#gauge .g-hub { fill: rgba(20,25,30,.7); stroke: rgba(255,255,255,.9); stroke-width: 2; }
+#gauge text { fill: #fff; text-anchor: middle; font-family: Arial, Helvetica, sans-serif; font-weight: 700; paint-order: stroke; stroke: rgba(0,0,0,.55); stroke-width: 2px; stroke-linejoin: round; }
+#gauge .g-num { font-size: 9px; }
+#speed { font-size: 25px; font-weight: 800; }
+#unit { font-size: 7.5px; letter-spacing: 1.5px; fill: #e3ebf2; }
+#gear { font-size: 15px; fill: #8ef5bc; }
+#drift-indicator { font-size: 8px; fill: #ffbd59; letter-spacing: 1px; opacity: 0; transition: opacity .15s; }
+
+/* Controls customization */
+[hidden] { display: none !important; }
+#settings-panel { max-height: calc(100vh - 20px); overflow-y: auto; }
+.tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.tab { flex: 1; padding: 8px 4px; border-radius: 10px; border: 2px solid rgba(255,255,255,.35); background: transparent; color: #fff; font-weight: 800; font-size: 11px; letter-spacing: 1px; cursor: pointer; touch-action: manipulation; }
+.tab.on { border-color: #fff; background: rgba(255,255,255,.2); }
+.set-col { margin: 12px 0 2px; font-size: 12px; display: flex; justify-content: space-between; }
+.toggle.wide { flex: 1; }
+#settings-panel input[type=range] { width: 100%; }
+#edit-done { display: none; position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 10px 24px; border-radius: 12px; border: 2px solid #ffbd59; background: rgba(255,189,89,.28); color: #fff; font-weight: 800; letter-spacing: 1px; cursor: pointer; touch-action: manipulation; }
+#steering-controls, #handbrake-btn { transform-origin: left bottom; }
+#pedal-controls { transform-origin: right bottom; }
+#steering-controls, #pedal-controls, #handbrake-btn { scale: var(--ts, 1); }
+#mobile-controls .touch-btn { opacity: var(--to, 1); }
+#mobile-controls.editing { display: block; }
+#mobile-controls.editing .touch-btn { opacity: 1; }
+#mobile-controls.editing .touch-cluster, #mobile-controls.editing #handbrake-btn { outline: 2px dashed #ffbd59; outline-offset: 5px; }
+
+/* HUD customization: scale and opacity come from CSS variables; visibility from body classes */
+#hud { transform-origin: top right; scale: var(--hs, 1); opacity: var(--ho, 1); }
+#help, #reset, #status { opacity: var(--ho, 1); }
+body.hide-gauge #gauge { display: none; }
+body.hide-gear #gear { display: none; }
+body.hide-drift #g-drift-track, body.hide-drift #g-drift, body.hide-drift #drift-indicator { display: none; }
+body.hide-help #help { display: none !important; }
+body.hide-status #status { display: none !important; }
+body.hide-reset #reset { display: none !important; }
+body.hud-editing #hud { pointer-events: auto; cursor: move; outline: 2px dashed #ffbd59; outline-offset: 6px; border-radius: 50%; }
+body.hide-nitro #nitro-meter { display: none; }
+
+/* Nitro: touch button above the pedals, and the tank meter under the speedometer */
+#nitro-btn { position: absolute; right: 26px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 150px); width: 52px; height: 52px; pointer-events: auto; transform-origin: right bottom; scale: var(--ts, 1); }
+#nitro-btn.active { background: rgba(255,140,40,.45); }
+#nitro-btn svg { stroke: #ffd39a; }
+#mobile-controls.editing #nitro-btn { outline: 2px dashed #ffbd59; outline-offset: 5px; }
+@media (max-width: 600px) {
+  #nitro-btn { width: 48px; height: 48px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 130px); right: 22px; }
+}
+#nitro-meter { margin-top: 8px; width: 100%; height: 10px; border: 2px solid var(--edge); border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+#nitro-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ffb13b, #ff6a2b); }
+#nitro-meter.on { border-color: #ffbd59; }
+#nitro-meter.on #nitro-fill { box-shadow: 0 0 8px #ff9a2b; }
+
+/* Gear shift (+ / -) */
+#gear-controls { position: absolute; right: 18px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 214px); display: flex; gap: 10px; pointer-events: auto; transform-origin: right bottom; scale: var(--ts, 1); }
+#gear-controls .touch-btn { width: 50px; height: 50px; }
+#gear-controls .touch-btn.active { background: rgba(142,245,188,.4); }
+body:not(.manual-trans) #gear-controls .touch-btn { opacity: calc(var(--to, 1) * .55); }   /* dimmed in automatic; pressing one switches to manual */
+#mobile-controls.editing #gear-controls { outline: 2px dashed #ffbd59; outline-offset: 5px; }
+@media (max-width: 600px) {
+  #gear-controls { right: 16px; bottom: calc(max(18px, env(safe-area-inset-bottom)) + 190px); gap: 8px; }
+  #gear-controls .touch-btn { width: 44px; height: 44px; }
+}
+/* Mouse + keyboard devices: show just the gear buttons (above the Reset button) */
+@media (pointer: fine) and (min-width: 801px) {
+  #mobile-controls { display: block; }
+  #mobile-controls > :not(#gear-controls) { display: none; }
+  #gear-controls { right: 20px; bottom: 74px; }
+}
+
+</style>
+</head>
+<body>
+  <div id="hud">
+    <svg id="gauge" viewBox="0 0 200 200" aria-label="Speedometer">
+      <circle class="g-shadow" cx="100" cy="100" r="98.5"/>
+      <circle class="g-face" cx="100" cy="100" r="97"/>
+      <path id="g-track" class="g-track"/>
+      <path id="g-drift-track" class="g-drift-track"/>
+      <path id="g-progress" class="g-progress" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="1"/>
+      <path id="g-drift" class="g-drift" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="1"/>
+      <g id="g-ticks"></g>
+      <rect class="g-box" x="68" y="108" width="64" height="38" rx="9"/>
+      <text id="speed" x="100" y="131">000</text>
+      <text id="unit" x="100" y="142">KM/H</text>
+      <text id="gear" x="100" y="161">N</text>
+      <text id="drift-indicator" x="100" y="174">DRIFT</text>
+      <g id="g-needle" transform="rotate(135 100 100)">
+        <line class="g-needle" x1="100" y1="100" x2="160" y2="100"/>
+        <circle class="g-hub" cx="100" cy="100" r="6"/>
+      </g>
+    </svg>
+    <div id="nitro-meter"><div id="nitro-fill"></div></div>
+  </div>
+  <div id="status">CAR Z · FREE DRIVE</div>
+  <div id="drift-score">DRIFT 0 <span class="best">BEST 0</span></div>
+  <div id="debug-overlay" style="display:none;position:fixed;left:16px;top:50px;z-index:15;padding:10px 12px;background:rgba(5,10,15,.82);border:1px solid rgba(255,255,255,.18);border-radius:8px;font:11px/1.7 monospace;white-space:pre;pointer-events:none"></div>
+  <div id="help">
+    <div><span class="key">W</span> Accelerate</div>
+    <div><span class="key">S</span> Brake / Reverse</div>
+    <div><span class="key">A</span><span class="key">D</span> Steer</div>
+    <div><span class="key">SPACE</span> Handbrake / Drift</div>
+    <div><span class="key">R</span> Reset car</div>
+    <div><span class="key">F3</span> Debug overlay</div>
+    <div>Drag mouse / right side of screen: look around</div>
+  </div>
+
+  <div id="mobile-controls" aria-label="Mobile driving controls">
+    <div id="steering-controls" class="touch-cluster">
+      <button class="touch-btn round" data-key="KeyA" aria-label="Steer left"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="touch-btn round" data-key="KeyD" aria-label="Steer right"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <button id="handbrake-btn" class="touch-btn round" data-key="Space" aria-label="Handbrake"><svg viewBox="0 0 24 24"><path d="M9 21V10a4 4 0 0 1 8 0v3"/><path d="M6 21h6"/><circle cx="17" cy="16.5" r="1.5"/></svg></button>
+    <button id="nitro-btn" class="touch-btn round nitro" data-key="ShiftLeft" aria-label="Nitro boost"><svg viewBox="0 0 24 24"><path d="M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z"/></svg></button>
+    <div id="gear-controls" aria-label="Gear shift">
+      <button class="touch-btn round" data-shift="-1" aria-label="Downshift"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button class="touch-btn round" data-shift="1" aria-label="Upshift"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+    <div id="pedal-controls" class="touch-cluster">
+      <button class="touch-btn pedal brake" data-key="KeyS" aria-label="Brake and reverse"><svg viewBox="0 0 24 24"><path d="M6 6l6 6 6-6"/><path d="M6 13l6 6 6-6"/></svg></button>
+      <button class="touch-btn pedal gas" data-key="KeyW" aria-label="Accelerate"><svg viewBox="0 0 24 24"><path d="M6 11l6-6 6 6"/><path d="M6 18l6-6 6 6"/></svg></button>
+    </div>
+  </div>
+
+  <button id="settings-btn" aria-label="Settings">&#9881;</button>
+  <div id="settings-panel">
+    <div class="tabs"><button class="tab on" data-tab="general">GENERAL</button><button class="tab" data-tab="hud">HUD</button><button class="tab" data-tab="controls">CONTROLS</button></div>
+    <div id="tab-general">
+      <div class="set-title">CAR</div>
+      <div class="set-row" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><button class="toggle wide" data-car="countach">Sport</button><button class="toggle wide" data-car="rally">Rally</button><button class="toggle wide" data-car="buggy">Buggy</button><button class="toggle wide" data-car="drift">Drift</button><button class="toggle wide" data-car="dakar">Dakar Truck</button></div>
+      <div class="set-row"><span>Fullscreen</span><button id="fs-toggle" class="toggle">OFF</button></div>
+      <div id="fs-note"></div>
+      <div class="set-row"><span>Drift assist</span><button id="assist-toggle" class="toggle on">ON</button></div>
+      <div class="set-row"><span>Transmission</span><button id="trans-toggle" class="toggle">AUTO</button></div>
+      <div class="set-row"><span>Nitro effects</span><button id="fx-toggle" class="toggle on">ON</button></div>
+      <div class="set-title" style="margin-top:14px">SOUND</div>
+      <div class="set-row"><span>Sound</span><button id="snd-toggle" class="toggle on">ON</button></div>
+      <div class="set-col"><span>Master</span><b id="v-master">70%</b></div>
+      <input data-vol="master" type="range" min="0" max="1" step="0.05" value="0.7">
+      <div class="set-col"><span>Engine</span><b id="v-engine">100%</b></div>
+      <input data-vol="engine" type="range" min="0" max="1" step="0.05" value="1">
+      <div class="set-col"><span>Tires &amp; terrain</span><b id="v-tires">100%</b></div>
+      <input data-vol="tires" type="range" min="0" max="1" step="0.05" value="1">
+      <div class="set-col"><span>Effects</span><b id="v-fx">100%</b></div>
+      <input data-vol="fx" type="range" min="0" max="1" step="0.05" value="1">
+      <div class="set-title" style="margin-top:14px">CAMERA</div>
+      <div><span>Camera distance</span> <span id="zoom-val">1.0x</span></div>
+      <input id="cam-zoom" type="range" min="0.5" max="1.6" step="0.05" value="1">
+    </div>
+    <div id="tab-hud" hidden>
+      <div class="set-title">SHOW ON SCREEN</div>
+      <div class="set-row"><span>Speedometer</span><button class="toggle on" data-hud="gauge">ON</button></div>
+      <div class="set-row"><span>Gear</span><button class="toggle on" data-hud="gear">ON</button></div>
+      <div class="set-row"><span>Drift meter</span><button class="toggle on" data-hud="drift">ON</button></div>
+      <div class="set-row"><span>Nitro meter</span><button class="toggle on" data-hud="nitro">ON</button></div>
+      <div class="set-row"><span>Help panel</span><button class="toggle on" data-hud="help">ON</button></div>
+      <div class="set-row"><span>Status line</span><button class="toggle on" data-hud="status">ON</button></div>
+      <div class="set-row"><span>Reset button</span><button class="toggle on" data-hud="reset">ON</button></div>
+      <div class="set-title" style="margin-top:14px">LAYOUT</div>
+      <div class="set-col"><span>HUD size</span><b id="hs-val">1.0x</b></div>
+      <input id="hs-slider" type="range" min="0.6" max="1.6" step="0.05" value="1">
+      <div class="set-col"><span>HUD opacity</span><b id="ho-val">100%</b></div>
+      <input id="ho-slider" type="range" min="0.2" max="1" step="0.05" value="1">
+      <div class="set-row"><button id="edit-hud" class="toggle wide">Move HUD</button><button id="reset-hud" class="toggle wide">Reset HUD</button></div>
+    </div>
+    <div id="tab-controls" hidden>
+      <div class="set-title">KEYBOARD (tap, then press a key)</div>
+      <div id="bind-list"></div>
+      <div class="set-title" style="margin-top:14px">TOUCH</div>
+      <div class="set-col"><span>Button size</span><b id="size-val">1.0x</b></div>
+      <input id="size-slider" type="range" min="0.7" max="1.5" step="0.05" value="1">
+      <div class="set-col"><span>Button opacity</span><b id="op-val">100%</b></div>
+      <input id="op-slider" type="range" min="0.25" max="1" step="0.05" value="1">
+      <div class="set-col"><span>Look sensitivity</span><b id="look-val">1.0x</b></div>
+      <input id="look-slider" type="range" min="0.4" max="2.5" step="0.1" value="1">
+      <div class="set-row"><button id="edit-layout" class="toggle wide">Move buttons</button><button id="reset-controls" class="toggle wide">Reset all</button></div>
+    </div>
+  </div>
+  <button id="edit-done">DONE</button>
+
+  <button id="reset">RESET CAR · R</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+  <script>
+// ============================================================
+// CONFIGURATION — all vehicle, tire, effects, and world tuning.
+// Units: metres, seconds, kilograms, newtons, radians.
+// ============================================================
+const CONFIG = {
+  // Vehicle / geometry (~1300 kg RWD coupe)
+  mass: 1300,
+  yawInertia: 2100,
+  wheelbase: 2.6,
+  cgToFrontAxle: 1.25,
+  cgToRearAxle: 1.35,
+  cgHeight: 0.52,
+  frontStaticLoadFraction: 0.52,
+  rearStaticLoadFraction: 0.48,
+  gravity: 9.81,
+  carLength: 4.0,
+  carWidth: 1.9,
+  carHeight: 0.9,
+  wheelRadius: 0.38,
+
+  // Pacejka-like tire curve: peak grip then fall-off at high slip
+  frontTireB: 10.0, frontTireC: 1.30, frontTireD: 1.00, frontTireE: 0.97,
+  rearTireB: 9.0, rearTireC: 1.30, rearTireD: 1.00, rearTireE: 0.97,
+  frontGrip: 1.08,
+  rearGrip: 1.02,
+  handbrakeRearGrip: 0.30,
+  rearSlipSmokeThreshold: 0.22,
+  rearSlipMarkThreshold: 0.18,
+
+  // Powertrain / brakes / resistance
+  engineForce: 7600,
+  brakeForce: 12500,
+  frontBrakeBias: 0.68,
+  rollingResistance: 150,
+  aeroDragCoefficient: 0.42,
+  airDensity: 1.225,
+  frontalArea: 2.15,
+  maxForwardSpeed: 62,
+  maxReverseSpeed: 12,
+  drivetrainEfficiency: 0.90,
+
+  // Steering and optional slide assist
+  maxSteeringAngleLowSpeed: 0.58,
+  maxSteeringAngleHighSpeed: 0.12,
+  steeringFadeSpeed: 34,
+  steeringResponse: 7.5,
+  countersteerAssist: true,
+  countersteerAssistStrength: 0.7,
+  countersteerStartSlip: 0.16,
+
+  // Fixed-step simulation
+  physicsHz: 120,
+  maxPhysicsStepsPerFrame: 12,
+
+  // Camera
+  cameraDistance: 6.2,
+  cameraHeight: 2.4,
+  cameraLookAhead: 2.5,
+  cameraSmoothness: 3.0,
+  cameraLookSensitivity: 0.006,
+
+  // World / visuals
+  groundSize: 2000,
+  gridSpacing: 10,
+  smokeParticleCount: 44,
+  smokeLifetime: 0.75,
+  smokeSpawnInterval: 0.045,
+  skidMarkLimit: 240,
+  debugOverlay: false,
+
+  // Nitro: tank drains in nitroDuration seconds of full use and refills over nitroRechargeTime
+  nitroDuration: 4,
+  nitroRechargeTime: 8,
+  nitroForceBoost: 1.6,
+  nitroTopSpeedBoost: 1.25,
+
+  // Per-car handling extras (overridden by each car's physics profile)
+  yawDamping: 400,          // resists spinning (N*m per rad/s)
+  driveFrontShare: 0,       // 0 = rear-wheel drive, 0.4 = 40% of drive to the front axle (AWD)
+  rollGain: 0.006, rollMax: 0.08,
+  pitchGain: 0.004, pitchMax: 0.06,
+  gearSpeeds: [0, 12, 22, 32, 43, 53],
+
+  // Drift model (per-car). Static -> kinetic friction, power-over, throttle-controlled angle, Scandinavian flick
+  kineticGrip: 1.0,          // rear grip multiplier once the tires are sliding (0.6-0.85 = realistic 15-40% drop)
+  slideEnterSlip: 0.14,      // rear slip angle (rad) that breaks the tires loose
+  slideExitSlip: 0.07,       // rear slip angle (rad) below which grip catches again
+  slidePowerRatio: 0.98,     // rear drive force / traction budget above which wheelspin breaks the tires loose (power-over)
+  kineticRise: 10,           // how fast grip falls away when the slide starts (1/s)
+  kineticFall: 4,            // how fast grip comes back when the slide ends (1/s)
+  driftThrottleGain: 0,      // extra rear grip lost per unit throttle while sliding (throttle widens the angle, lifting closes it)
+  flickKick: 0,              // yaw kick (rad/s^2) from a quick left-right steering reversal
+  flickGripDrop: 0,          // rear grip lost right after a flick (weight thrown off the rear inside tire)
+  flickDuration: 0.5,        // seconds the flick effect lasts
+  throttleRise: 0.12,        // seconds for the throttle to build from 0 to full (tap the gas to feather it)
+  assistPlayerCut: 0.5       // how much the drift assist can reduce your own steering while sliding (0.5 = you keep half)
+};
+
+// Scene setup
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x91a9bb);
+scene.fog = new THREE.Fog(0x91a9bb, 100, 380);
+
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 600);
+camera.position.set(0, 5, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.shadowMap.enabled = false;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+renderer.domElement.style.touchAction = "none";
+
+scene.add(new THREE.HemisphereLight(0xdcecff, 0x526044, 2.0));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(-60, 100, 40);
+scene.add(sun);
+
+// Generate a repeatable grid texture without external image assets.
+function createGridTexture() {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#343c40";
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = "#414a4e";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= size; i += 32) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+  }
+
+  ctx.strokeStyle = "#596368";
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= size; i += 128) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(CONFIG.groundSize / 32, CONFIG.groundSize / 32);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(CONFIG.groundSize, CONFIG.groundSize),
+  new THREE.MeshStandardMaterial({ map: createGridTexture(), roughness: 1, metalness: 0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.02;
+scene.add(ground);
+
+// ---------- Detailed car: extruded body profile, cabin, aero kit, lights, detailed wheels ----------
+const car = new THREE.Group();
+scene.add(car);
+
+const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xe8896f, roughness: 0.75, metalness: 0.0 });
+const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x1d3347, roughness: 0.08, metalness: 0.6 });
+const carbonMaterial = new THREE.MeshStandardMaterial({ color: 0x14171a, roughness: 0.55, metalness: 0.2 });
+const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.95 });
+const rimMaterial = new THREE.MeshStandardMaterial({ color: 0xc9d1d8, metalness: 0.8, roughness: 0.25 });
+const darkRimMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2f34, metalness: 0.5, roughness: 0.5 });
+const discMaterial = new THREE.MeshStandardMaterial({ color: 0x8a9096, metalness: 0.9, roughness: 0.4 });
+const caliperMaterial = new THREE.MeshStandardMaterial({ color: 0xd0262b, roughness: 0.4 });
+const plateMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.6 });
+const headlightMaterial = new THREE.MeshBasicMaterial({ color: 0xfff3cf });
+const rearLightMaterial = new THREE.MeshBasicMaterial({ color: 0xb01818 });
+
+function addBox(parent, size, position, material) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material);
+  mesh.position.set(position.x, position.y, position.z);
+  parent.add(mesh);
+  return mesh;
+}
+const box = (w, h, d, x, y, z, mat, parent = car) => addBox(parent, new THREE.Vector3(w, h, d), new THREE.Vector3(x, y, z), mat);
+
+// Side profile (z along the car, front = negative; y = height) extruded across the width, with rounded edges.
+function extrudeProfile(points, width, bevel, material) {
+  const shape = new THREE.Shape();
+  points.forEach(([z, y], i) => (i ? shape.lineTo(z, y) : shape.moveTo(z, y)));
+  const depth = width - 2 * bevel;
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3 });
+  geo.rotateY(-Math.PI / 2);
+  geo.translate(depth / 2, 0, 0);
+  const mesh = new THREE.Mesh(geo, material);
+  car.add(mesh);
+  return mesh;
+}
+
+// ---------- Car models: each builder fills the shared `car` group; switch live from Settings > General ----------
+const wheels = [];
+let carLayout = { track: 1.02, frontZ: -1.3, rearZ: 1.3 };   // used for rear-tire smoke / skid positions
+const archMaterial = new THREE.MeshBasicMaterial({ color: 0x050607 });
+const whiteRimMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f2f4, metalness: 0.3, roughness: 0.4 });
+const orangeRimMaterial = new THREE.MeshStandardMaterial({ color: 0xff8a2a, metalness: 0.35, roughness: 0.45 });
+const tubeMaterial = new THREE.MeshStandardMaterial({ color: 0xf2701c, metalness: 0.3, roughness: 0.4 });
+const pinkRimMaterial = new THREE.MeshStandardMaterial({ color: 0xff2f9a, metalness: 0.4, roughness: 0.35 });
+const liveryPink = new THREE.MeshStandardMaterial({ color: 0xff4fa8, roughness: 0.4 });
+const liveryCyan = new THREE.MeshStandardMaterial({ color: 0x37d8ea, roughness: 0.4 });
+const liveryWhite = new THREE.MeshStandardMaterial({ color: 0xf3f3f6, roughness: 0.4 });
+const fenderMaterial = new THREE.MeshStandardMaterial({ color: 0x14171a, roughness: 0.7, side: THREE.DoubleSide });
+
+// Soft blob shadow under the car (stays in place when the car model is swapped)
+const shadowCanvas = document.createElement("canvas");
+shadowCanvas.width = 64; shadowCanvas.height = 128;
+const sg = shadowCanvas.getContext("2d"), sgrad = sg.createRadialGradient(32, 64, 6, 32, 64, 62);
+sgrad.addColorStop(0, "rgba(0,0,0,0.65)"); sgrad.addColorStop(1, "rgba(0,0,0,0)");
+sg.setTransform(1, 0, 0, 1, 0, 0); sg.fillStyle = sgrad; sg.fillRect(0, 0, 64, 128);
+const shadow = new THREE.Mesh(
+  new THREE.PlaneGeometry(2.8, 5.4).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shadowCanvas), transparent: true, depthWrite: false })
+);
+shadow.position.y = 0.012;
+shadow.rotation.order = "YXZ";
+scene.add(shadow);   // lives in the world so it stays on the ground while the car is airborne
+
+// Wheel: tire, dark barrel, lip, 5 spokes, center cap, brake disc (spin) + caliper (does not spin)
+function createWheel(x, z, isFront, o) {
+  const side = Math.sign(x), R = o.radius, W = o.width;
+  const pivot = new THREE.Group();
+  pivot.position.set(x, R, z);
+  car.add(pivot);
+  const mesh = new THREE.Group();
+  pivot.add(mesh);
+  const cyl = (r, len, mat, off) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 24), mat);
+    m.rotation.z = Math.PI / 2; m.position.x = off || 0; mesh.add(m); return m;
+  };
+  cyl(R, W, tireMaterial);
+  if (o.knobs) for (let i = 0; i < 20; i++) {          // knobbly off-road tread blocks (they spin with the wheel)
+    const g = new THREE.Group();
+    g.rotation.x = (i * 2 * Math.PI) / 20;
+    box(W * 0.95, 0.06, 0.1, 0, R + 0.01, 0, tireMaterial, g);
+    mesh.add(g);
+  }
+  cyl(R * 0.7, W + 0.01, o.barrel || darkRimMaterial);
+  cyl(R * 0.55, 0.03, discMaterial, -side * 0.05);
+  cyl(0.05, 0.04, o.rim, side * (W / 2 + 0.01));
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(R * 0.7, 0.02, 8, 28), o.rim);
+  lip.rotation.y = Math.PI / 2; lip.position.x = side * (W / 2 + 0.005); mesh.add(lip);
+  const nSpokes = o.spokes || 5;
+  for (let i = 0; i < nSpokes; i++) {
+    const g = new THREE.Group();
+    g.rotation.x = (i * 2 * Math.PI) / nSpokes;
+    box(0.025, R * 0.53, o.spokeW || 0.06, side * (W / 2), R * 0.4, 0, o.rim, g);
+    mesh.add(g);
+  }
+  box(0.05, 0.1, 0.15, -side * 0.05, R * 0.55, 0.1, caliperMaterial, pivot);
+  wheels.push({ pivot, mesh, isFront });
+}
+function addWheels(o) {
+  createWheel(-o.track, o.frontZ, true, o);
+  createWheel(o.track, o.frontZ, true, o);
+  createWheel(-o.track, o.rearZ, false, o);
+  createWheel(o.track, o.rearZ, false, o);
+  carLayout = { track: o.track, frontZ: o.frontZ, rearZ: o.rearZ };
+  CONFIG.wheelRadius = o.radius;   // keeps wheel spin speed correct for this car's tire size
+}
+
+// ---------- Handling profiles. Anything a profile leaves out falls back to the original CONFIG values ----------
+const PHYS_KEYS = ["mass", "yawInertia", "wheelbase", "cgToFrontAxle", "cgToRearAxle", "cgHeight",
+  "frontStaticLoadFraction", "rearStaticLoadFraction",
+  "frontTireB", "frontTireC", "frontTireD", "frontTireE", "rearTireB", "rearTireC", "rearTireD", "rearTireE",
+  "frontGrip", "rearGrip", "handbrakeRearGrip", "rearSlipSmokeThreshold", "rearSlipMarkThreshold",
+  "engineForce", "brakeForce", "frontBrakeBias", "rollingResistance", "aeroDragCoefficient", "frontalArea",
+  "maxForwardSpeed", "maxReverseSpeed", "drivetrainEfficiency",
+  "maxSteeringAngleLowSpeed", "maxSteeringAngleHighSpeed", "steeringFadeSpeed", "steeringResponse",
+  "countersteerAssistStrength", "countersteerStartSlip",
+  "yawDamping", "driveFrontShare", "rollGain", "rollMax", "pitchGain", "pitchMax", "gearSpeeds",
+  "kineticGrip", "slideEnterSlip", "slideExitSlip", "slidePowerRatio", "kineticRise", "kineticFall",
+  "driftThrottleGain", "flickKick", "flickGripDrop", "flickDuration", "throttleRise"];
+const PHYS_DEFAULT = {};
+PHYS_KEYS.forEach(k => { PHYS_DEFAULT[k] = CONFIG[k]; });
+const phys = overrides => Object.assign({}, PHYS_DEFAULT, overrides);
+
+const PHYSICS = {
+  // SPORT: mid-engine RWD supercar. Huge grip and brakes, quick precise steering, highest top speed, power oversteer when you mash the throttle.
+  sport: phys({
+    mass: 1350, yawInertia: 2250, wheelbase: 2.6, cgToFrontAxle: 1.35, cgToRearAxle: 1.25, cgHeight: 0.46,
+    frontStaticLoadFraction: 0.48, rearStaticLoadFraction: 0.52,
+    frontTireB: 11.5, frontTireC: 1.3, frontTireD: 1.0, frontTireE: 0.97,
+    rearTireB: 10.5, rearTireC: 1.3, rearTireD: 1.0, rearTireE: 0.97,
+    frontGrip: 1.3, rearGrip: 1.25, handbrakeRearGrip: 0.3,
+    engineForce: 12000, drivetrainEfficiency: 0.92, brakeForce: 17000, frontBrakeBias: 0.65,
+    rollingResistance: 140, aeroDragCoefficient: 0.36, frontalArea: 2.0, maxForwardSpeed: 78, maxReverseSpeed: 11,
+    maxSteeringAngleLowSpeed: 0.5, maxSteeringAngleHighSpeed: 0.1, steeringFadeSpeed: 40, steeringResponse: 10.5,
+    countersteerAssistStrength: 0.55, countersteerStartSlip: 0.18,
+    yawDamping: 450, driveFrontShare: 0,
+    rollGain: 0.004, rollMax: 0.06, pitchGain: 0.003, pitchMax: 0.05,
+    gearSpeeds: [0, 14, 26, 38, 49, 59],
+    kineticGrip: 0.8, slideEnterSlip: 0.17, slideExitSlip: 0.09, slidePowerRatio: 1.0, kineticRise: 14, kineticFall: 7,
+    driftThrottleGain: 0.1, flickKick: 1.6, flickGripDrop: 0.1, flickDuration: 0.4, throttleRise: 0.18
+  }),
+  // RALLY: AWD (40% front) hatchback. Strong, planted traction, forgiving progressive slides, wide steering lock, flicks into drifts easily with the handbrake.
+  rally: phys({
+    mass: 1250, yawInertia: 1850, wheelbase: 2.6, cgToFrontAxle: 1.2, cgToRearAxle: 1.4, cgHeight: 0.55,
+    frontStaticLoadFraction: 0.54, rearStaticLoadFraction: 0.46,
+    frontTireB: 8.5, frontTireC: 1.3, frontTireD: 1.0, frontTireE: 0.95,
+    rearTireB: 8.0, rearTireC: 1.3, rearTireD: 1.0, rearTireE: 0.95,
+    frontGrip: 1.15, rearGrip: 1.1, handbrakeRearGrip: 0.22, rearSlipSmokeThreshold: 0.2, rearSlipMarkThreshold: 0.16,
+    engineForce: 9300, drivetrainEfficiency: 0.9, brakeForce: 13000, frontBrakeBias: 0.6,
+    rollingResistance: 190, aeroDragCoefficient: 0.4, frontalArea: 2.1, maxForwardSpeed: 62, maxReverseSpeed: 12,
+    maxSteeringAngleLowSpeed: 0.62, maxSteeringAngleHighSpeed: 0.18, steeringFadeSpeed: 38, steeringResponse: 9,
+    countersteerAssistStrength: 0.8, countersteerStartSlip: 0.14,
+    yawDamping: 380, driveFrontShare: 0.4,
+    rollGain: 0.008, rollMax: 0.11, pitchGain: 0.006, pitchMax: 0.09,
+    gearSpeeds: [0, 11, 21, 31, 41, 50],
+    kineticGrip: 0.72, slideEnterSlip: 0.12, slideExitSlip: 0.06, slidePowerRatio: 0.95, kineticRise: 11, kineticFall: 5,
+    driftThrottleGain: 0.18, flickKick: 3.2, flickGripDrop: 0.3, flickDuration: 0.55, throttleRise: 0.22
+  }),
+  // DRIFT: FR coupe tuned to slide. Rear breaks away easily, huge handbrake kick, strong automatic countersteer, wide lock even at speed, holds angle on the throttle.
+  drift: phys({
+    mass: 1200, yawInertia: 1840, wheelbase: 2.5, cgToFrontAxle: 1.22, cgToRearAxle: 1.28, cgHeight: 0.48,
+    frontStaticLoadFraction: 0.512, rearStaticLoadFraction: 0.488,
+    frontTireB: 9.1, frontTireC: 1.3, frontTireD: 1.0, frontTireE: 0.95,
+    rearTireB: 6.7, rearTireC: 1.3, rearTireD: 1.0, rearTireE: 0.95,
+    frontGrip: 1.15, rearGrip: 1.12, handbrakeRearGrip: 0.18, rearSlipSmokeThreshold: 0.14, rearSlipMarkThreshold: 0.11,
+    engineForce: 9200, drivetrainEfficiency: 0.9, brakeForce: 14000, frontBrakeBias: 0.6,
+    rollingResistance: 150, aeroDragCoefficient: 0.38, frontalArea: 1.9, maxForwardSpeed: 70, maxReverseSpeed: 11,
+    maxSteeringAngleLowSpeed: 0.62, maxSteeringAngleHighSpeed: 0.24, steeringFadeSpeed: 45, steeringResponse: 10.3,
+    countersteerAssistStrength: 1.3, countersteerStartSlip: 0.092,
+    yawDamping: 470, driveFrontShare: 0,
+    rollGain: 0.007, rollMax: 0.1, pitchGain: 0.005, pitchMax: 0.08,
+    gearSpeeds: [0, 12, 23, 34, 45, 55],
+    kineticGrip: 0.62, slideEnterSlip: 0.09, slideExitSlip: 0.05, slidePowerRatio: 0.85, kineticRise: 12, kineticFall: 4,
+    driftThrottleGain: 0.3, flickKick: 3.6, flickGripDrop: 0.35, flickDuration: 0.6, throttleRise: 0.25
+  }),
+  // BUGGY: very light, short wheelbase, tall CG. Punchy acceleration, twitchy and tail-happy, loose progressive tires, big body roll and squat.
+  buggy: phys({
+    mass: 780, yawInertia: 900, wheelbase: 2.3, cgToFrontAxle: 1.25, cgToRearAxle: 1.05, cgHeight: 0.62,
+    frontStaticLoadFraction: 0.457, rearStaticLoadFraction: 0.543,
+    frontTireB: 7.5, frontTireC: 1.25, frontTireD: 1.0, frontTireE: 0.95,
+    rearTireB: 6.8, rearTireC: 1.25, rearTireD: 1.0, rearTireE: 0.95,
+    frontGrip: 1.1, rearGrip: 1.05, handbrakeRearGrip: 0.26, rearSlipSmokeThreshold: 0.18, rearSlipMarkThreshold: 0.14,
+    engineForce: 6200, drivetrainEfficiency: 0.92, brakeForce: 8800, frontBrakeBias: 0.6,
+    rollingResistance: 130, aeroDragCoefficient: 0.55, frontalArea: 1.7, maxForwardSpeed: 56, maxReverseSpeed: 12,
+    maxSteeringAngleLowSpeed: 0.62, maxSteeringAngleHighSpeed: 0.2, steeringFadeSpeed: 30, steeringResponse: 11.5,
+    countersteerAssistStrength: 0.85, countersteerStartSlip: 0.12,
+    yawDamping: 220, driveFrontShare: 0,
+    rollGain: 0.012, rollMax: 0.16, pitchGain: 0.008, pitchMax: 0.12,
+    gearSpeeds: [0, 10, 19, 28, 37, 45],
+    kineticGrip: 0.66, slideEnterSlip: 0.1, slideExitSlip: 0.05, slidePowerRatio: 0.9, kineticRise: 16, kineticFall: 3,
+    driftThrottleGain: 0.22, flickKick: 4.2, flickGripDrop: 0.35, flickDuration: 0.5, throttleRise: 0.1
+  })
+};
+
+// ============================================================
+// DRIFT SYSTEM — modular traction layer. Sits ON TOP of the bicycle model; it only touches
+//   (a) rear lateral grip, (b) load transfer / yaw kick on initiation, (c) counter-steer help,
+//   (d) scrub-momentum retention and (e) an optional exit mini-boost.
+// Engine force, top speed, steering lock / response and braking are NOT changed here.
+// Per-car feel lives in DRIFT_PROFILES (one object per car, any field can be omitted).
+// ============================================================
+const DRIFT_DEFAULT = {
+  // --- initiation (grip drop) ---
+  driftEase: 8,              // 1/s: how fast rear grip falls toward corneringStiffness once drift input is held (higher = snappier)
+  corneringStiffness: 0.28,  // rear grip fraction KEPT at full drift (1 = never lets go, 0.2 = very loose)
+  minSpeed: 6,               // m/s: drift input does nothing below this
+  // --- weight transfer on initiation ---
+  weightTransfer: 1.0,       // scales the rear-unload, yaw kick and pitch/roll lurch (0 = none, 1.5 = very dramatic)
+  initYawKick: 1.2,          // rad/s^2 peak yaw kick toward the steering direction at initiation
+  kickTime: 0.35,            // s the weight-transfer pulse lasts
+  // --- angle control / counter-steer ---
+  maxDriftAngle: 0.9,        // rad: past this the assist weakens, bonuses are lost and rear grip drops further (spin-out zone)
+  counterSteerGain: 0.8,     // automatic counter-steer strength (0 = off). Toggled by Settings > Drift assist
+  assistStartAngle: 0.14,    // rad of drift angle before the assist starts to help
+  counterSteerLead: 0.15,    // s: assist also reacts to yaw rate (angle + lead*yawRate) so the tail is caught BEFORE it swings through
+  stability: 1.0,            // extra yaw damping while the front wheels point into the slide
+  momentumKeep: 0.6,         // 0..0.9: fraction of sideways-scrub speed loss given back while counter-steering
+  // --- exit / recovery ---
+  recoveryRate: 5,           // 1/s: how fast rear grip returns to 100% (held back until the car has straightened, so the tail doesn't whip)
+  boostEnabled: true,        // exit mini-boost on/off
+  boostMinAngle: 0.2,        // rad: drift must exceed this to charge the boost
+  chargeTime: 1.5,           // s of a good drift to fill the charge
+  boostMinCharge: 0.4,       // charge needed for the boost to fire on exit
+  boostDuration: 0.6,        // s
+  boostForce: 0.28           // peak extra drive force as a fraction of engineForce (never pushes past maxForwardSpeed)
+};
+const DRIFT_PROFILES = {
+  // Snappy and precise: grip lets go fast, comes back fast, small angle, little theatre.
+  sport: { driftEase: 7, corneringStiffness: 0.32, weightTransfer: 0.7, initYawKick: 0.7, maxDriftAngle: 0.85,
+           counterSteerGain: 0.55, assistStartAngle: 0.18, counterSteerLead: 0.12, stability: 0.9, momentumKeep: 0.55, recoveryRate: 7,
+           chargeTime: 1.6, boostMinCharge: 0.45, boostForce: 0.3 },
+  // Planted AWD: progressive, forgiving, wide angle, drives out strongly.
+  rally: { driftEase: 8, corneringStiffness: 0.24, weightTransfer: 1.0, initYawKick: 1.2, maxDriftAngle: 0.95,
+           counterSteerGain: 0.8, assistStartAngle: 0.14, counterSteerLead: 0.15, stability: 1.0, momentumKeep: 0.7, recoveryRate: 5,
+           chargeTime: 1.4, boostForce: 0.28 },
+  // Built to slide: very loose, long lingering angle, strong auto-countersteer and momentum keeping.
+  drift: { driftEase: 11, corneringStiffness: 0.2, weightTransfer: 1.2, initYawKick: 1.5, maxDriftAngle: 1.15,
+           counterSteerGain: 1.3, assistStartAngle: 0.092, counterSteerLead: 0.18, stability: 1.25, momentumKeep: 0.8, recoveryRate: 3.5,
+           chargeTime: 1.2, boostForce: 0.22 },
+  // Light and tail-happy: instant break-away, big lurch, small safe angle, snaps back quickly.
+  buggy: { driftEase: 14, corneringStiffness: 0.26, weightTransfer: 1.5, initYawKick: 1.4, maxDriftAngle: 0.85,
+           counterSteerGain: 0.85, assistStartAngle: 0.12, counterSteerLead: 0.10, stability: 0.6, momentumKeep: 0.45, recoveryRate: 8,
+           chargeTime: 1.3, boostForce: 0.34 },
+  // Heavy long-travel desert truck: planted and predictable. Slides progressively, slow weight shift, strong yaw damping, controlled recovery.
+  dakar: { driftEase: 10, corneringStiffness: 0.27, weightTransfer: 0.75, initYawKick: 0.75, maxDriftAngle: 0.8,
+           counterSteerGain: 1.5, assistStartAngle: 0.15, counterSteerLead: 0.14, stability: 1.0, momentumKeep: 0.7, recoveryRate: 4.5,
+           chargeTime: 1.8, boostMinCharge: 0.45, boostForce: 0.3 }
+};
+let driftProfile = Object.assign({}, DRIFT_DEFAULT, DRIFT_PROFILES.sport);
+const drift = {};
+function resetDrift() {
+  Object.assign(drift, { grip: 1, engaged: 0, over: 0, cs: 0, aEff: 0, kick: 0, kickDir: 0, wasWant: false, loadShift: 0, yawKick: 0,
+    visRoll: 0, visPitch: 0, charge: 0, active: false, boostT: 0, boostPow: 0, boostForce: 0 });
+}
+resetDrift();
+const smoothstep01 = x => { x = Math.min(Math.max(x, 0), 1); return x * x * (3 - 2 * x); };
+
+// Call once per physics step, BEFORE steering and tire forces. Fills `drift` with this step's modifiers.
+function driftUpdate(dt, handbrake, steerIn, speed, angle) {
+  const dp = driftProfile, d = drift, absA = Math.abs(angle);
+  d.over = smoothstep01((absA - dp.maxDriftAngle) / (dp.maxDriftAngle * 0.35));          // 0 = controllable, 1 = spin-out zone
+
+  // 1. Initiation / recovery: rear lateral grip multiplier eases toward the drift level, or back to 1
+  const wantDrift = !!handbrake && speed > dp.minSpeed && (steerIn !== 0 || d.engaged > 0.3 || state.sliding);
+  const target = wantDrift ? dp.corneringStiffness : 1;
+  const rate = target < d.grip
+    ? dp.driftEase
+    : dp.recoveryRate * (0.08 + 0.92 * (1 - smoothstep01((absA / dp.maxDriftAngle - 0.3) / 0.7)));   // grip returns as the car straightens
+  d.grip = damp(d.grip, target, rate, dt);
+  if (d.grip > 0.995) d.grip = 1;
+  d.engaged = clamp((1 - d.grip) / (1 - dp.corneringStiffness), 0, 1);
+
+  // 2. Weight transfer pulse when the drift starts: rear unloads, yaw kicks toward the turn, body pitches/rolls
+  if (wantDrift && !d.wasWant) { d.kick = 1; d.kickDir = steerIn || Math.sign(state.steeringAngle); }
+  d.wasWant = wantDrift;
+  d.kick = Math.max(0, d.kick - dt / dp.kickTime);
+  const k = d.kick * dp.weightTransfer;
+  d.loadShift = -k * 0.05 * CONFIG.mass * CONFIG.gravity;                                  // negative = load moves off the rear axle
+  d.yawKick = k * dp.initYawKick * d.kickDir * clamp(speed / 15, 0, 1);
+  d.visRoll = -d.kickDir * k * 0.05;
+  d.visPitch = -k * 0.03;
+
+  // 3. Counter-steer reward: 0..1 = how far the front wheels point INTO the slide (player or assist), mostly lost in the spin-out zone.
+  //    aEff = angle + lead*yawRate is where the slide is heading, so it also catches the tail swinging back through straight
+  d.aEff = angle + dp.counterSteerLead * state.yawRate;
+  const into = -Math.sign(d.aEff) * state.steeringAngle;
+  d.cs = clamp(into / 0.15, 0, 1) * clamp(Math.abs(d.aEff) / 0.12, 0, 1) * (1 - 0.7 * d.over);
+
+  // 4. Drift charge -> exit mini-boost (spinning out wastes the charge)
+  const minA = dp.boostMinAngle * (d.active ? 0.6 : 1);                                    // hysteresis so S-bends don't pop it early
+  d.active = speed > 8 && absA > minA && (d.engaged > 0.3 || state.sliding);
+  if (d.over > 0.5) d.charge = 0;
+  else if (d.active) d.charge = Math.min(1, d.charge + dt / dp.chargeTime * clamp(absA / 0.4, 0.4, 1));
+  else if (d.charge > 0) {
+    if (dp.boostEnabled && d.charge >= dp.boostMinCharge) { d.boostT = dp.boostDuration; d.boostPow = d.charge; }
+    d.charge = 0;
+  }
+  d.boostT = Math.max(0, d.boostT - dt);
+  d.boostForce = d.boostT > 0 && state.vx < CONFIG.maxForwardSpeed
+    ? dp.boostForce * CONFIG.engineForce * d.boostPow * (d.boostT / dp.boostDuration) : 0;
+}
+
+// Target steering angle: player input plus automatic counter-steer toward the direction of travel.
+function driftSteerTarget(playerSteer, steerIn, angle) {
+  if (!CONFIG.countersteerAssist) return playerSteer;
+  const dp = driftProfile, a = drift.aEff;
+  const w = clamp((Math.abs(a) - dp.assistStartAngle) / 0.15, 0, 1) * clamp(1 + state.vx / 3, 0, 1) * (1 - 0.6 * drift.over);
+  // Point the front wheels along where the FRONT AXLE is travelling (zero front slip), plus extra lock in proportion to the
+  // slide so the front tires pull the nose back instead of pushing it deeper. Gain 1 = neutral, higher = stronger recovery.
+  const frontVel = Math.atan2(state.vy - CONFIG.cgToFrontAxle * state.yawRate, Math.max(state.vx, 1));
+  const assist = -(frontVel + 0.4 * dp.counterSteerGain * a);
+  const cut = steerIn * a < 0 ? 0 : CONFIG.assistPlayerCut * w;                            // already counter-steering = full authority
+  return clamp(playerSteer * (1 - cut) + assist * w, -0.6, 0.6);
+}
+
+// Force (N) along the velocity direction that gives back part of the speed lost to sideways tire scrub.
+function driftMomentum(fyBody, spd) {
+  if (spd < 3 || state.vx <= 0 || state.vx >= CONFIG.maxForwardSpeed || drift.cs <= 0) return 0;
+  return driftProfile.momentumKeep * drift.cs * Math.abs(fyBody) * Math.sin(Math.min(Math.abs(state.driftAngle), 1));
+}
+
+// ---------- Nitro exhaust flames: color follows the tank (blue = full, orange = half, red = nearly empty) ----------
+const glowTexture = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d"), grad = g.createRadialGradient(32, 32, 1, 32, 32, 31);
+  grad.addColorStop(0, "rgba(255,255,255,1)"); grad.addColorStop(0.35, "rgba(255,255,255,0.45)"); grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const flameOuterMat = new THREE.MeshBasicMaterial({ color: 0x2ea8ff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+const flameCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+const flameGlowMat = new THREE.SpriteMaterial({ map: glowTexture, color: 0x2ea8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+const nitroLight = new THREE.PointLight(0x2ea8ff, 0, 10);    // lights the ground behind the car; intensity 0 when off
+nitroLight.position.set(0, 0.6, 2.5);
+car.add(nitroLight);
+const flames = [];
+const NITRO_BLUE = new THREE.Color(0x2ea8ff), NITRO_ORANGE = new THREE.Color(0xff8a1f), NITRO_RED = new THREE.Color(0xff2a10), WHITE = new THREE.Color(0xffffff);
+const NITRO_ICE = new THREE.Color(0xd8ecff);
+function nitroColorAt(t, out) {          // full tank: blue -> bright white-blue -> orange -> red as it drains
+  if (t > 0.7) out.copy(NITRO_ICE).lerp(NITRO_BLUE, (t - 0.7) / 0.3);
+  else if (t > 0.45) out.copy(NITRO_ORANGE).lerp(NITRO_ICE, (t - 0.45) / 0.25);
+  else out.copy(NITRO_RED).lerp(NITRO_ORANGE, t / 0.45);
+  return out;
+}
+function flameCone() { return new THREE.ConeGeometry(1, 1, 12, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2); }   // base at origin, tip along +z (backwards)
+function buildFlames(def) {
+  flames.length = 0;
+  for (const [x, y, z] of def.exhausts) {
+    const g = new THREE.Group();
+    g.position.set(x, y, z + 0.02);
+    const outer = new THREE.Mesh(flameCone(), flameOuterMat), core = new THREE.Mesh(flameCone(), flameCoreMat);
+    const glow = new THREE.Sprite(flameGlowMat);
+    glow.position.z = 0.15;
+    g.add(outer, core, glow);
+    car.add(g);
+    flames.push({ g, outer, core, glow, r: def.flameRadius, phase: Math.random() * 10 });
+  }
+}
+
+// Low-poly loft: stations = [{ z, pts: [[x, y], ...] }], each section's right half from bottom-centre up to top-centre (same point count everywhere).
+// Mirrored for the left side and flat-shaded so every face reads as a facet.
+function loft(stations, material, segColor) {
+  const n = stations[0].pts.length;
+  const ringOf = st => {
+    const r = st.pts.map(([x, y]) => [x, y]);
+    for (let i = n - 2; i >= 1; i--) r.push([-st.pts[i][0], st.pts[i][1]]);
+    return r.map(([x, y]) => new THREE.Vector3(x, y, st.z));
+  };
+  const rings = stations.map(ringOf), m = rings[0].length, pos = [], col = [];
+  const white = new THREE.Color(1, 1, 1);
+  const tri = (a, b, c, color) => {
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    const k = color || white; col.push(k.r, k.g, k.b, k.r, k.g, k.b, k.r, k.g, k.b);
+  };
+  for (let k = 0; k < rings.length - 1; k++) for (let i = 0; i < m; i++) {
+    const a = rings[k][i], b = rings[k][(i + 1) % m], c = rings[k + 1][(i + 1) % m], d = rings[k + 1][i];
+    const color = segColor ? segColor(i) : null;
+    tri(a, b, c, color); tri(a, c, d, color);
+  }
+  for (const idx of [0, rings.length - 1]) {                       // end caps
+    const rg = rings[idx], c = rg.reduce((acc, v) => acc.add(v), new THREE.Vector3()).multiplyScalar(1 / m);
+    for (let i = 0; i < m; i++) tri(c, rg[i], rg[(i + 1) % m], segColor ? segColor(-1) : null);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  if (segColor) g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  const mesh = new THREE.Mesh(g, material);
+  car.add(mesh);
+  return mesh;
+}
+// Flat polygon decal on the car's flank: poly = [[z, y], ...] for the right side at x; mirrored to the left.
+function sidePanel(poly, x, material) {
+  const tris = THREE.ShapeUtils.triangulateShape(poly.map(([z, y]) => new THREE.Vector2(z, y)), []);
+  for (const s of [-1, 1]) {
+    const pos = [];
+    for (const t of tris) for (const i of t) pos.push(s * x, poly[i][1], poly[i][0]);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    car.add(new THREE.Mesh(g, material));
+  }
+}
+
+const CAR_MODELS = {
+  // Low-poly supercar: faceted dark-slate body, red accent blades, cyan canopy, neon-outlined lights, big rear wing, dark multi-spoke wheels
+  countach: {
+    name: "Sport", body: 0x2f4b53, glass: 0x22d9d4, physics: PHYSICS.sport, drift: DRIFT_PROFILES.sport, exhausts: [[-0.56, 0.42, 2.1], [-0.36, 0.42, 2.1], [0.36, 0.42, 2.1], [0.56, 0.42, 2.1]], flameRadius: 0.075,
+    build() {
+      const flat = (color, extra = {}) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.55, metalness: 0.15, flatShading: true, side: THREE.DoubleSide }, extra));
+      const slate = flat(0x2f4b53), slateDark = flat(0x1b2a30, { roughness: 0.65 }), slateLight = flat(0x44626b);
+      const red = flat(0xe01c1c, { roughness: 0.45, metalness: 0.1 });
+      const redDecal = flat(0xe01c1c, { roughness: 0.45, metalness: 0.1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const intakeDecal = flat(0x0a1014, { roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+      const cyanGlass = flat(0xffffff, { vertexColors: true, emissive: 0x053f3d, emissiveIntensity: 0.6, roughness: 0.35, metalness: 0 });
+      const CYAN = new THREE.Color(0x2ee6e0), SIDEWIN = new THREE.Color(0x1c3a42);
+      const black = flat(0x0b1114, { roughness: 0.75, metalness: 0.1 });
+      const neon = new THREE.MeshBasicMaterial({ color: 0x35f5ea });
+      const wheelSpoke = new THREE.MeshStandardMaterial({ color: 0x3a4f58, metalness: 0.6, roughness: 0.4 });
+      const wheelBarrel = new THREE.MeshStandardMaterial({ color: 0x131b1f, metalness: 0.4, roughness: 0.6 });
+
+      // Cross-section (right half, bottom -> top centre) of the shell at station z; mirrored for the left side
+      const sec = (z, hw, yb, yt, crown) => {
+        const k = Math.min(1, (yt - yb) / 0.36);
+        return { z, pts: [[0, yb], [hw - 0.08, yb], [hw, yb + 0.08 * k], [hw, yt - 0.05 * k], [Math.max(0.05, hw - 0.2), yt], [0, yt + crown]] };
+      };
+      // Main shell: low pointed nose, flat hood, wide hips, high rear deck, short tail
+      loft([
+        sec(-2.02, 0.70, 0.30, 0.50, 0.02), sec(-1.85, 0.90, 0.30, 0.62, 0.0), sec(-1.35, 1.00, 0.30, 0.76, -0.06),
+        sec(-0.75, 1.02, 0.30, 0.74, -0.02), sec(-0.45, 1.02, 0.30, 0.76, 0.02), sec(0.45, 1.02, 0.30, 0.78, 0.0),
+        sec(1.05, 1.02, 0.30, 0.84, 0.02), sec(1.60, 0.98, 0.32, 0.86, 0.03), sec(2.00, 0.84, 0.34, 0.72, 0.02)
+      ], slate);
+      // Cyan canopy: raked windscreen, flat roof, tapering rear glass
+      const cab = (z, hwb, hwr, yb, yt) => ({ z, pts: [[0, yb], [hwb, yb], [hwr, yt - 0.04], [hwr * 0.6, yt], [0, yt + 0.01]] });
+      loft([cab(-0.72, 0.80, 0.72, 0.76, 0.79), cab(-0.28, 0.80, 0.56, 0.77, 1.00), cab(0.02, 0.80, 0.48, 0.78, 1.10),
+            cab(0.55, 0.80, 0.46, 0.80, 1.10), cab(1.20, 0.78, 0.38, 0.82, 0.90), cab(1.55, 0.74, 0.32, 0.83, 0.85)],
+           cyanGlass, i => (i === 1 || i === 6) ? SIDEWIN : CYAN);
+
+      // Red accent blades on the flanks: lower sill, diagonal slash behind the front wheel, door zig-zag, rear intake with dark mouth
+      sidePanel([[-0.80, 0.41], [0.42, 0.41], [0.42, 0.47], [-0.80, 0.47]], 1.028, redDecal);
+      sidePanel([[-0.82, 0.41], [-0.38, 0.41], [0.08, 0.70], [-0.38, 0.70]], 1.028, redDecal);
+      sidePanel([[-0.12, 0.41], [0.18, 0.41], [0.18, 0.53], [0.40, 0.53], [0.40, 0.69], [0.16, 0.69], [0.16, 0.60], [-0.12, 0.60]], 1.028, redDecal);
+      sidePanel([[0.45, 0.41], [0.86, 0.41], [0.86, 0.70], [0.62, 0.70]], 1.028, redDecal);
+      sidePanel([[0.56, 0.47], [0.82, 0.47], [0.82, 0.64], [0.68, 0.64]], 1.03, intakeDecal);
+
+      // Hood: two angled louvred vents
+      for (const s of [-1, 1]) {
+        const g = new THREE.Group();
+        g.position.set(s * 0.3, 0.735, -1.0); g.rotation.order = "YXZ"; g.rotation.y = s * 0.32; g.rotation.x = -0.12;
+        box(0.2, 0.03, 0.62, 0, 0, 0, black, g);
+        for (const z of [-0.2, 0, 0.2]) box(0.2, 0.025, 0.045, 0, 0.02, z, slateLight, g);
+        car.add(g);
+      }
+
+      // Front end: red-framed black grille with fins, splitter, neon-outlined headlights and fog lights
+      box(0.9, 0.17, 0.05, 0, 0.40, -2.04, black);
+      box(1.0, 0.045, 0.06, 0, 0.505, -2.045, red);
+      for (const s of [-1, 1]) box(0.045, 0.2, 0.06, s * 0.48, 0.41, -2.045, red);
+      for (let i = -3; i <= 3; i++) box(0.05, 0.12, 0.03, i * 0.11, 0.4, -2.075, slateLight);
+      box(1.5, 0.04, 0.42, 0, 0.29, -1.9, slateDark);
+      box(1.2, 0.016, 0.02, 0, 0.315, -2.075, neon);                       // neon under-lip
+      const outline = (w, h, x, y, z, yaw, t = 0.03) => {
+        const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = yaw;
+        box(w, t, t * 1.2, 0, h / 2, 0, neon, g); box(w, t, t * 1.2, 0, -h / 2, 0, neon, g);
+        box(t, h, t * 1.2, -w / 2, 0, 0, neon, g); box(t, h, t * 1.2, w / 2, 0, 0, neon, g);
+        box(w - 0.02, h - 0.02, 0.02, 0, 0, 0.004, black, g);
+        car.add(g);
+      };
+      for (const s of [-1, 1]) {
+        outline(0.44, 0.12, s * 0.57, 0.45, -1.99, -s * 0.3);               // headlight
+        outline(0.17, 0.05, s * 0.8, 0.355, -1.93, -s * 0.5);              // stacked fog lights
+        outline(0.17, 0.05, s * 0.8, 0.42, -1.945, -s * 0.5);
+        box(0.18, 0.02, 0.02, s * 0.74, 0.31, -1.98, neon).rotation.y = -s * 0.5;
+      }
+
+      // Rear end: light bar and lamps, plate, diffuser, exhaust tips
+      box(1.3, 0.06, 0.04, 0, 0.66, 2.0, rearLightMaterial);
+      for (const s of [-1, 1]) box(0.26, 0.12, 0.05, s * 0.62, 0.62, 2.0, rearLightMaterial);
+      box(0.5, 0.1, 0.02, 0, 0.5, 2.01, plateMaterial);
+      box(1.3, 0.12, 0.35, 0, 0.37, 1.85, slateDark);
+      for (const s of [-1, 1]) for (const ex of [0.36, 0.56]) {            // quad exhaust: two tips per side
+        const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.22, 14), discMaterial);
+        tip.rotation.x = Math.PI / 2; tip.position.set(s * ex, 0.42, 2.0); car.add(tip);
+        const bore = new THREE.Mesh(new THREE.CircleGeometry(0.04, 14), archMaterial);   // dark opening so each tip reads as a pipe
+        bore.position.set(s * ex, 0.42, 2.112); car.add(bore);
+      }
+
+      // Red mirrors, side skirts, big rear wing on swan-neck stands with end plates
+      for (const s of [-1, 1]) {
+        box(0.1, 0.03, 0.04, s * 0.84, 0.86, -0.54, slateDark);
+        const mirror = box(0.11, 0.06, 0.17, s * 0.9, 0.88, -0.5, red); mirror.rotation.y = s * 0.3;
+        box(0.08, 0.1, 1.9, s * 1.0, 0.33, 0.0, slateDark);               // side skirts
+        const stand = box(0.07, 0.43, 0.13, s * 0.55, 1.04, 1.735, slateDark); stand.rotation.x = 0.57;
+        box(0.04, 0.3, 0.62, s * 1.04, 1.26, 1.86, slateDark);             // end plates
+        box(0.04, 0.06, 0.2, s * 1.04, 1.43, 1.62, slateDark).rotation.x = 0.5;
+      }
+      const wing = box(2.1, 0.05, 0.52, 0, 1.24, 1.86, slateDark); wing.rotation.x = -0.1;
+      box(2.1, 0.07, 0.04, 0, 1.3, 2.1, slateDark);                          // gurney flap
+
+      // Wheel arches (dark half discs) and fender lips
+      for (const side of [-1, 1]) for (const z of [-1.3, 1.3]) {
+        const arch = new THREE.Mesh(new THREE.CircleGeometry(0.45, 24, 0, Math.PI), archMaterial);
+        arch.rotation.y = side * Math.PI / 2; arch.position.set(side * 1.035, 0.38, z); car.add(arch);
+        const flare = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.04, 8, 24, Math.PI), slate);
+        flare.rotation.y = Math.PI / 2; flare.position.set(side * 1.05, 0.38, z); car.add(flare);
+      }
+
+      addWheels({ track: 1.02, frontZ: -1.3, rearZ: 1.3, radius: 0.38, width: 0.3, rim: wheelSpoke, barrel: wheelBarrel, spokes: 7, spokeW: 0.065 });
+    }
+  },
+
+  // Low-poly white rally hatchback: wide flared arches, big grille, tall carbon wing, roof vent and antenna
+  rally: {
+    name: "Rally", body: 0xf1eff4, glass: 0x4b406b, physics: PHYSICS.rally, drift: DRIFT_PROFILES.rally, exhausts: [[-0.5, 0.4, 2.1], [0.5, 0.4, 2.1]], flameRadius: 0.09,
+    build() {
+      // Body shell: hood slopes up to the windscreen, short tail with hatch
+      extrudeProfile([[-2.0, 0.3], [-2.0, 0.62], [-1.55, 0.78], [-0.55, 0.92], [1.0, 0.95], [1.75, 0.98], [1.95, 0.88], [1.95, 0.3]], 1.8, 0.03, bodyMaterial);
+      // Greenhouse (dark glass) with white roof panel and B-pillars
+      extrudeProfile([[-0.55, 0.9], [0.1, 1.4], [1.1, 1.42], [1.8, 0.96]], 1.5, 0.03, glassMaterial);
+      box(1.46, 0.05, 1.0, 0, 1.44, 0.6, bodyMaterial);
+      for (const s of [-1, 1]) box(0.06, 0.46, 0.1, s * 0.76, 1.15, 0.55, bodyMaterial);
+      box(0.55, 0.05, 0.4, 0, 1.49, 0.35, carbonMaterial);          // roof vent
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 6), carbonMaterial);
+      ant.position.set(-0.45, 1.8, 0.9); car.add(ant);
+
+      // Front end: big grille, splitter, projector headlights, hood vents
+      box(1.2, 0.26, 0.06, 0, 0.5, -2.0, carbonMaterial);
+      box(1.9, 0.05, 0.45, 0, 0.31, -1.85, carbonMaterial);
+      for (const s of [-1, 1]) {
+        box(0.5, 0.14, 0.1, s * 0.66, 0.7, -1.92, carbonMaterial);
+        box(0.34, 0.08, 0.04, s * 0.66, 0.7, -1.98, headlightMaterial);
+        const vent = box(0.4, 0.02, 0.45, s * 0.45, 0.885, -1.05, carbonMaterial);
+        vent.rotation.x = -0.14;
+      }
+
+      // Rear end: light bar, plate, diffuser, exhaust tips
+      box(1.4, 0.07, 0.04, 0, 0.86, 1.99, rearLightMaterial);
+      box(0.5, 0.12, 0.02, 0, 0.6, 1.99, plateMaterial);
+      box(1.7, 0.16, 0.3, 0, 0.4, 1.85, carbonMaterial);
+      for (const s of [-1, 1]) {
+        const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 12), discMaterial);
+        tip.rotation.x = Math.PI / 2; tip.position.set(s * 0.5, 0.4, 2.0); car.add(tip);
+      }
+
+      // Tall rear wing on stands with end plates
+      for (const s of [-1, 1]) {
+        box(0.05, 0.34, 0.24, s * 0.7, 1.15, 1.85, carbonMaterial);
+        box(0.04, 0.3, 0.6, s * 0.95, 1.4, 1.88, carbonMaterial);
+      }
+      const wing = box(1.9, 0.05, 0.5, 0, 1.42, 1.88, carbonMaterial);
+      wing.rotation.x = -0.1;
+
+      // Side skirts, mirrors, door seams and handles
+      for (const s of [-1, 1]) {
+        box(0.08, 0.12, 2.0, s * 0.93, 0.38, -0.05, carbonMaterial);
+        box(0.12, 0.1, 0.22, s * 1.0, 0.98, -0.45, bodyMaterial);
+        for (const z of [-0.3, 1.0]) box(0.012, 0.34, 0.012, s * 0.935, 0.7, z, carbonMaterial);
+        box(0.03, 0.03, 0.14, s * 0.95, 0.78, 0.3, carbonMaterial);
+      }
+
+      // Wide flared arches
+      for (const side of [-1, 1]) for (const z of [-1.3, 1.3]) {
+        const arch = new THREE.Mesh(new THREE.CircleGeometry(0.4, 24, 0, Math.PI), archMaterial);
+        arch.rotation.y = side * Math.PI / 2; arch.position.set(side * 0.96, 0.35, z); car.add(arch);
+        const flare = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.07, 8, 24, Math.PI), bodyMaterial);
+        flare.rotation.y = Math.PI / 2; flare.position.set(side * 0.98, 0.35, z); car.add(flare);
+      }
+
+      addWheels({ track: 0.9, frontZ: -1.3, rearZ: 1.3, radius: 0.35, width: 0.26, rim: whiteRimMaterial });
+    }
+  },
+
+  // Off-road buggy (Ariel Nomad style): orange tube frame and roll cage, yellow bonnet, roof light bar, spare tire, knobbly tires
+  buggy: {
+    name: "Buggy", body: 0xf2a71b, glass: 0x7f9fb3, physics: PHYSICS.buggy, drift: DRIFT_PROFILES.buggy, exhausts: [[0.3, 0.55, 2.0]], flameRadius: 0.11,
+    build() {
+      const tube = (a, b, r = 0.035, mat = tubeMaterial) => {
+        const A = new THREE.Vector3(a[0], a[1], a[2]), B = new THREE.Vector3(b[0], b[1], b[2]);
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, A.distanceTo(B), 8), mat);
+        m.position.copy(A).add(B).multiplyScalar(0.5);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize());
+        car.add(m);
+        return m;
+      };
+      const zCyl = (r, len, mat, x, y, z) => {          // short cylinder pointing along the car (lights)
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 14), mat);
+        m.rotation.x = Math.PI / 2; m.position.set(x, y, z); car.add(m); return m;
+      };
+
+      // Tub, nose pod with yellow bonnet, engine bay with cover
+      box(1.05, 0.3, 1.7, 0, 0.5, 0.2, carbonMaterial);
+      extrudeProfile([[-1.75, 0.38], [-1.75, 0.6], [-1.15, 0.78], [-0.55, 0.9], [-0.55, 0.38]], 1.3, 0.03, carbonMaterial);
+      const bonnet = box(0.8, 0.03, 1.25, 0, 0.83, -1.15, bodyMaterial);
+      bonnet.rotation.x = -0.245;
+      box(0.9, 0.5, 0.7, 0, 0.75, 1.35, carbonMaterial);
+      box(0.9, 0.06, 0.7, 0, 1.03, 1.35, bodyMaterial);
+
+      // Bucket seats and steering wheel
+      for (const s of [-1, 1]) {
+        box(0.38, 0.1, 0.5, s * 0.25, 0.68, 0.35, carbonMaterial);
+        const back = box(0.38, 0.6, 0.1, s * 0.25, 0.98, 0.62, carbonMaterial);
+        back.rotation.x = 0.12;
+      }
+      const wheelRing = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 8, 16), carbonMaterial);
+      wheelRing.position.set(-0.25, 1.0, -0.12); wheelRing.rotation.x = -0.9; car.add(wheelRing);
+
+      // Roll cage and frame (orange tubes)
+      for (const s of [-1, 1]) {
+        tube([s * 0.62, 0.7, -0.55], [s * 0.52, 1.4, 0.1]);      // A-pillar
+        tube([s * 0.52, 1.4, 0.1], [s * 0.52, 1.4, 1.05]);       // roof rail
+        tube([s * 0.52, 1.4, 1.05], [s * 0.6, 0.65, 1.15]);      // rear leg
+        tube([s * 0.6, 0.95, -0.45], [s * 0.6, 0.95, 0.95]);     // door bar
+        tube([s * 0.6, 0.95, 0.35], [s * 0.52, 1.4, 0.35]);      // B-bar
+        tube([s * 0.55, 0.65, -0.55], [s * 0.55, 0.65, 1.15]);   // sill
+        tube([s * 0.5, 0.7, 1.1], [s * 0.45, 0.7, 1.75]);        // engine bay rail
+      }
+      tube([-0.52, 1.4, 0.1], [0.52, 1.4, 0.1]);
+      tube([-0.52, 1.4, 1.05], [0.52, 1.4, 1.05]);
+      tube([-0.62, 0.7, -0.55], [0.62, 0.7, -0.55]);
+      tube([-0.52, 1.1, 1.1], [0.52, 1.1, 1.1]);
+
+      // Windscreen
+      const screen = box(1.0, 0.81, 0.02, 0, 1.14, -0.22, glassMaterial);
+      screen.rotation.x = 0.93;
+
+      // Roof light bar (4 round lamps) and spare wheel on the roof
+      tube([-0.5, 1.52, 0.0], [0.5, 1.52, 0.0], 0.03, carbonMaterial);
+      for (const s of [-1, 1]) tube([s * 0.45, 1.4, 0.1], [s * 0.45, 1.52, 0.0], 0.025, carbonMaterial);
+      for (const x of [-0.36, -0.12, 0.12, 0.36]) {
+        zCyl(0.095, 0.08, carbonMaterial, x, 1.6, -0.04);
+        zCyl(0.075, 0.01, headlightMaterial, x, 1.6, -0.085);
+      }
+      const spare = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.22, 18), tireMaterial);
+      spare.position.set(0, 1.56, 0.62); car.add(spare);
+      const spareHub = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.225, 12), orangeRimMaterial);
+      spareHub.position.set(0, 1.56, 0.62); car.add(spareHub);
+
+      // Front bull bar and low fog-lamp banks
+      for (const s of [-1, 1]) {
+        tube([s * 0.45, 0.45, -1.8], [s * 0.45, 0.85, -1.88], 0.028, carbonMaterial);
+        tube([s * 0.45, 0.85, -1.88], [s * 0.45, 0.8, -1.4], 0.028, carbonMaterial);
+        for (let i = 0; i < 3; i++) {
+          zCyl(0.055, 0.09, carbonMaterial, s * (0.38 + 0.13 * i), 0.5, -1.78);
+          zCyl(0.042, 0.01, headlightMaterial, s * (0.38 + 0.13 * i), 0.5, -1.83);
+        }
+      }
+      tube([-0.45, 0.85, -1.88], [0.45, 0.85, -1.88], 0.028, carbonMaterial);
+      tube([-0.45, 0.55, -1.85], [0.45, 0.55, -1.85], 0.028, carbonMaterial);
+
+      // Rear: tail lamps, plate, exhaust
+      for (const s of [-1, 1]) box(0.22, 0.07, 0.04, s * 0.4, 0.88, 1.72, rearLightMaterial);
+      box(0.4, 0.1, 0.02, 0, 0.62, 1.72, plateMaterial);
+      zCyl(0.05, 0.5, discMaterial, 0.3, 0.55, 1.75);
+
+      // Wishbones, shock absorbers and black mudguards over each wheel
+      const R = 0.42;
+      for (const s of [-1, 1]) for (const z of [-1.25, 1.05]) {
+        tube([s * 0.35, 0.5, z], [s * 0.8, 0.45, z], 0.022, carbonMaterial);
+        tube([s * 0.38, 0.95, z], [s * 0.78, 0.55, z], 0.03, tubeMaterial);
+        const fender = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.07, R + 0.07, 0.5, 20, 1, true, 0, Math.PI), fenderMaterial);
+        fender.rotation.z = Math.PI / 2; fender.position.set(s * 0.9, R, z); car.add(fender);
+      }
+
+      addWheels({ track: 0.9, frontZ: -1.25, rearZ: 1.05, radius: R, width: 0.32, rim: darkRimMaterial, barrel: orangeRimMaterial, knobs: true });
+    }
+  },
+
+  // Drift car: black Nissan 180SX / S13 style with pink 8-spoke wheels, big GT wing, wide arches, anime-style livery
+  drift: {
+    name: "Drift", body: 0x1c1d22, glass: 0x1a2a4a, physics: PHYSICS.drift, drift: DRIFT_PROFILES.drift, finish: [0.28, 0.5],
+    exhausts: [[0.5, 0.38, 2.36]], flameRadius: 0.11,
+    build() {
+      // Body: long low hood, raked windscreen, short roof and sloping hatch; glass cabin with roof panel and pillars
+      extrudeProfile([[-2.2, 0.3], [-2.2, 0.52], [-1.95, 0.6], [-1.0, 0.68], [-0.55, 0.78], [0.8, 0.82], [1.6, 0.8], [2.2, 0.74], [2.2, 0.3]], 1.76, 0.02, bodyMaterial);
+      extrudeProfile([[-0.55, 0.76], [0.1, 1.22], [1.0, 1.24], [1.8, 0.8]], 1.5, 0.02, glassMaterial);
+      box(1.42, 0.04, 0.95, 0, 1.25, 0.55, bodyMaterial);
+      for (const s of [-1, 1]) box(0.05, 0.44, 0.1, s * 0.75, 1.0, 0.5, bodyMaterial);
+
+      // Front: closed pop-up headlights, hood vents, bumper, intake, indicators, big splitter
+      for (const s of [-1, 1]) {
+        box(0.46, 0.06, 0.2, s * 0.55, 0.655, -1.85, carbonMaterial);
+        box(0.4, 0.03, 0.04, s * 0.55, 0.66, -1.97, headlightMaterial);
+        const vent = box(0.38, 0.02, 0.5, s * 0.32, 0.725, -1.0, carbonMaterial);
+        vent.rotation.x = -0.17;
+        box(0.22, 0.06, 0.04, s * 0.7, 0.5, -2.25, headlightMaterial);
+      }
+      box(1.7, 0.26, 0.06, 0, 0.43, -2.22, carbonMaterial);
+      box(0.9, 0.1, 0.04, 0, 0.4, -2.26, discMaterial);
+      box(1.95, 0.04, 0.55, 0, 0.3, -2.0, carbonMaterial);
+
+      // Livery: white base with pink and cyan graphics on the sides, stripes on the hood
+      for (const s of [-1, 1]) {
+        box(0.012, 0.3, 1.5, s * 0.915, 0.58, 0.55, liveryWhite);
+        box(0.014, 0.22, 0.75, s * 0.918, 0.6, 1.0, liveryPink);
+        box(0.014, 0.16, 0.5, s * 0.918, 0.52, 0.2, liveryCyan);
+        box(0.014, 0.1, 0.35, s * 0.918, 0.7, 1.35, liveryCyan);
+        box(0.014, 0.08, 0.2, s * 0.918, 0.45, 0.7, liveryWhite);
+      }
+      for (const [x, mat, w] of [[0, liveryPink, 0.16], [-0.14, liveryCyan, 0.05], [0.14, liveryCyan, 0.05]]) {
+        const strip = box(w, 0.012, 1.2, x, 0.69, -1.2, mat);
+        strip.rotation.x = -0.084;
+      }
+
+      // Side skirts, mirrors
+      for (const s of [-1, 1]) {
+        box(0.07, 0.1, 2.0, s * 0.93, 0.38, 0.0, carbonMaterial);
+        box(0.12, 0.09, 0.2, s * 0.98, 0.9, -0.4, bodyMaterial);
+      }
+
+      // Rear: tail lights, plate, bumper, exhaust tip
+      for (const s of [-1, 1]) box(0.55, 0.11, 0.04, s * 0.55, 0.7, 2.22, rearLightMaterial);
+      box(0.4, 0.11, 0.04, 0, 0.7, 2.22, carbonMaterial);
+      box(0.42, 0.11, 0.02, 0, 0.58, 2.24, plateMaterial);
+      box(1.7, 0.2, 0.3, 0, 0.4, 2.07, carbonMaterial);
+      const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.24, 14), discMaterial);
+      tip.rotation.x = Math.PI / 2; tip.position.set(0.5, 0.38, 2.22); car.add(tip);
+
+      // Big GT wing on stands with end plates
+      for (const s of [-1, 1]) {
+        box(0.05, 0.5, 0.28, s * 0.55, 1.03, 1.95, carbonMaterial);
+        box(0.04, 0.34, 0.62, s * 0.96, 1.32, 2.0, carbonMaterial);
+      }
+      const wing = box(1.9, 0.05, 0.5, 0, 1.34, 2.0, carbonMaterial);
+      wing.rotation.x = -0.12;
+
+      // Wide arches
+      for (const side of [-1, 1]) for (const z of [-1.22, 1.28]) {
+        const arch = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24, 0, Math.PI), archMaterial);
+        arch.rotation.y = side * Math.PI / 2; arch.position.set(side * 0.94, 0.34, z); car.add(arch);
+        const flare = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.06, 8, 24, Math.PI), bodyMaterial);
+        flare.rotation.y = Math.PI / 2; flare.position.set(side * 0.96, 0.34, z); car.add(flare);
+      }
+
+      addWheels({ track: 0.93, frontZ: -1.22, rearZ: 1.28, radius: 0.34, width: 0.3, rim: pinkRimMaterial, barrel: darkRimMaterial, spokes: 8, spokeW: 0.07 });
+    }
+  },
+  // Dakar trophy truck: long-travel desert racer with wide stance, oversized tires, cage and rear spare.
+  dakar: {
+    name: "Dakar Trophy Truck", body: 0x2a6fd6, glass: 0x182b3d, physics: Object.assign({}, PHYSICS.buggy, {
+      // Heavy, long-wheelbase, high-riding truck: stable, slow to rotate, soft and progressive tyres on sand.
+      mass: 2150, yawInertia: 4200, wheelbase: 3.25, cgToFrontAxle: 1.55, cgToRearAxle: 1.7, cgHeight: 0.72,
+      frontStaticLoadFraction: 0.523, rearStaticLoadFraction: 0.477,      // matches the 1.55 / 1.70 m axle split (was the buggy 46/54)
+      frontTireB: 6.0, frontTireC: 1.35, frontTireD: 1.0, frontTireE: 0.95,
+      rearTireB: 6.2, rearTireC: 1.35, rearTireD: 1.0, rearTireE: 0.95,
+      frontGrip: 1.05, rearGrip: 1.25, handbrakeRearGrip: 0.3,      // rear grips harder than front: understeer margin, so the truck never snaps round
+      kineticGrip: 0.72, slideEnterSlip: 0.12, slideExitSlip: 0.06, slidePowerRatio: 0.95, kineticRise: 10, kineticFall: 3.5,
+      driftThrottleGain: 0.18, flickKick: 1.6, flickGripDrop: 0.2, flickDuration: 0.6, throttleRise: 0.18,
+      engineForce: 12800, drivetrainEfficiency: 0.92, brakeForce: 16000, frontBrakeBias: 0.6,
+      rollingResistance: 170, aeroDragCoefficient: 0.5, frontalArea: 2.6, maxForwardSpeed: 52, maxReverseSpeed: 13,
+      maxSteeringAngleLowSpeed: 0.52, maxSteeringAngleHighSpeed: 0.085, steeringFadeSpeed: 24, steeringResponse: 6.5,   // lock fades out earlier so full-lock at speed can't exceed grip
+      countersteerAssistStrength: 1.3, countersteerStartSlip: 0.12,
+      yawDamping: 2500, driveFrontShare: 0.2,                             // damping scaled to the truck's yaw inertia: tests show it no longer spins out
+      rollGain: 0.007, rollMax: 0.12, pitchGain: 0.005, pitchMax: 0.09
+    }),
+    drift: Object.assign({}, DRIFT_PROFILES.dakar),
+    exhausts: [[-0.48, 0.58, 2.0], [0.48, 0.58, 2.0]], flameRadius: 0.12,
+    build() {
+      const tube = (a, b, r = 0.045, mat = tubeMaterial) => {
+        const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, A.distanceTo(B), 8), mat);
+        m.position.copy(A).add(B).multiplyScalar(0.5);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize());
+        car.add(m);
+      };
+      const cyan = new THREE.MeshStandardMaterial({ color: 0x43d9f3, roughness: 0.42, metalness: 0.12 });
+      const pink = new THREE.MeshStandardMaterial({ color: 0xff3eaa, roughness: 0.42, metalness: 0.12 });
+      const white = new THREE.MeshStandardMaterial({ color: 0xf2f4f7, roughness: 0.5 });
+      const teal = new THREE.MeshStandardMaterial({ color: 0x1fcfc0, roughness: 0.4, metalness: 0.2 });
+      const pinkBodyMat = new THREE.MeshStandardMaterial({ color: 0xff4fb3, roughness: 0.45, metalness: 0.1 });
+      // High-clearance body, sculpted hood, front skid plate and heavy-duty bumper.
+      box(1.9, 0.38, 2.55, 0, 0.68, -0.05, bodyMaterial);
+      extrudeProfile([[-2.0, 0.48], [-1.92, 0.72], [-1.25, 0.98], [-0.55, 1.0], [-0.48, 0.52]], 1.62, 0.04, bodyMaterial);
+      box(1.8, 0.15, 0.32, 0, 0.42, -2.02, carbonMaterial);
+      box(1.55, 0.2, 0.12, 0, 0.62, -2.08, carbonMaterial);
+      box(1.15, 0.18, 0.05, 0, 0.69, -2.15, headlightMaterial);
+      for (const x of [-0.68, -0.34, 0, 0.34, 0.68]) box(0.06, 0.16, 0.035, x, 0.54, -2.1, discMaterial);
+      // Crew cab and tinted windows.
+      box(1.42, 0.12, 1.25, 0, 1.22, 0.12, bodyMaterial);
+      extrudeProfile([[-0.62, 0.9], [-0.48, 1.56], [0.55, 1.56], [0.94, 0.9]], 1.25, 0.025, glassMaterial);
+      box(1.1, 0.07, 0.85, 0, 1.58, 0.18, carbonMaterial);
+      for (const side of [-1, 1]) {
+        tube([side * 0.68, 0.8, -0.62], [side * 0.56, 1.62, -0.36]);
+        tube([side * 0.56, 1.62, -0.36], [side * 0.56, 1.62, 0.68]);
+        tube([side * 0.56, 1.62, 0.68], [side * 0.72, 0.82, 0.92]);
+        tube([side * 0.56, 1.35, -0.2], [side * 0.56, 1.35, 0.62]);
+        box(0.16, 0.18, 1.5, side * 1.0, 0.62, 0.1, bodyMaterial);
+        // Bright blue side protection and pink race accents inspired by the reference image.
+        box(0.08, 0.52, 0.92, side * 1.03, 0.77, 0.65, side === 1 ? 0xff55b8 : 0x55d9ff);
+        box(0.08, 0.12, 1.0, side * 1.04, 0.48, -0.15, carbonMaterial);
+      }
+      tube([-0.56, 1.62, -0.36], [0.56, 1.62, -0.36]);
+      tube([-0.56, 1.62, 0.68], [0.56, 1.62, 0.68]);
+      // Roof rally lights and antennas.
+      box(1.35, 0.15, 0.12, 0, 1.69, -0.42, headlightMaterial);
+      for (let i = -4; i <= 4; i++) box(0.1, 0.1, 0.08, i * 0.14, 1.7, -0.49, discMaterial);
+      tube([0.38, 1.67, 0.5], [0.42, 2.15, 0.55], 0.018, carbonMaterial);
+      // Rear engine cover, tail lamps and rear-mounted spare tire.
+      box(1.25, 0.38, 0.85, 0, 0.86, 1.42, pinkBodyMat);
+      box(1.25, 0.06, 0.72, 0, 1.08, 1.42, bodyMaterial);
+      box(1.2, 0.12, 0.08, 0, 0.75, 1.9, rearLightMaterial);
+      const spare = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.15, 8, 20), tireMaterial);
+      spare.position.set(0, 1.22, 1.5); spare.rotation.x = Math.PI / 2; car.add(spare);
+      const spareHub = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.12, 12), rimMaterial);
+      spareHub.rotation.x = Math.PI / 2; spareHub.position.set(0, 1.22, 1.5); car.add(spareHub);
+      // Trophy-truck bodywork: fender flares, exposed long-travel suspension and desert-racing details.
+      // Nose armor, bash plate, grille slats and corner light pods.
+      box(1.72, 0.22, 0.26, 0, 0.48, -2.15, carbonMaterial);
+      box(1.45, 0.16, 0.08, 0, 0.64, -2.19, carbonMaterial);
+      for (let i = -3; i <= 3; i++) box(0.045, 0.12, 0.025, i * 0.16, 0.64, -2.24, discMaterial);
+      // Black slatted grille with a bright LED light bar, as on the reference truck.
+      box(1.3, 0.22, 0.05, 0, 0.6, -2.22, carbonMaterial);
+      box(1.3, 0.04, 0.04, 0, 0.74, -2.24, headlightMaterial);
+      for (const side of [-1, 1]) {
+        box(0.32, 0.2, 0.1, side * 0.72, 0.75, -2.1, headlightMaterial);
+        box(0.06, 0.2, 0.24, side * 0.88, 0.53, -2.08, cyan);
+        const hoodStripe = box(0.16, 0.018, 1.18, side * 0.34, 0.905, -1.25, side < 0 ? pink : cyan);
+        hoodStripe.rotation.x = -0.13;
+        const hoodSlash = box(0.09, 0.02, 0.7, side * 0.56, 0.85, -1.45, white);
+        hoodSlash.rotation.x = -0.19;
+        box(0.018, 0.24, 0.62, side * 1.085, 0.82, 0.18, side < 0 ? cyan : pink);
+        // Exposed suspension links and long-travel coilover hints at each wheel.
+        for (const z of [-1.42, 1.35]) {
+          tube([side * 0.48, 0.48, z - 0.12], [side * 0.94, 0.56, z + 0.12], 0.035, discMaterial);
+          tube([side * 0.48, 0.35, z + 0.15], [side * 0.94, 0.5, z - 0.14], 0.028, carbonMaterial);
+          tube([side * 0.74, 0.42, z - 0.05], [side * 0.72, 0.82, z + 0.12], 0.045, tubeMaterial);
+        }
+        for (const z of [-1.42, 1.35]) {
+          const flare = new THREE.Mesh(new THREE.TorusGeometry(0.59, 0.11, 8, 28, Math.PI), side < 0 ? cyan : pink);
+          flare.rotation.y = Math.PI / 2; flare.position.set(side * 1.02, 0.52, z); car.add(flare);
+          const inner = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.035, 6, 28, Math.PI), carbonMaterial);
+          inner.rotation.y = Math.PI / 2; inner.position.set(side * 1.105, 0.52, z); car.add(inner);
+        }
+      }
+      // White race number roundels on both doors.
+      for (const side of [-1, 1]) {
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(0.26, 24), white);
+        disc.rotation.y = side * Math.PI / 2; disc.position.set(side * 1.12, 0.78, 0.25); car.add(disc);
+      }
+      // Reinforced tubular front hoop and tow points.
+      tube([-0.92, 0.38, -2.16], [-0.92, 0.62, -2.22], 0.055, carbonMaterial);
+      tube([-0.92, 0.62, -2.22], [0.92, 0.62, -2.22], 0.055, carbonMaterial);
+      tube([0.92, 0.62, -2.22], [0.92, 0.38, -2.16], 0.055, carbonMaterial);
+      for (const side of [-1, 1]) box(0.12, 0.07, 0.08, side * 0.58, 0.35, -2.25, pink);
+      // Rear engine vents, tail protection and beefier all-terrain tires.
+      for (let i = -3; i <= 3; i++) box(0.12, 0.025, 0.44, i * 0.17, 1.12, 1.4, discMaterial);
+      box(1.65, 0.1, 0.18, 0, 0.5, 1.98, carbonMaterial);
+      tube([-0.8, 0.52, 1.95], [-0.8, 0.76, 2.0], 0.04, carbonMaterial);
+      tube([0.8, 0.52, 1.95], [0.8, 0.76, 2.0], 0.04, carbonMaterial);
+      addWheels({ track: 1.12, frontZ: -1.42, rearZ: 1.35, radius: 0.52, width: 0.42, rim: teal, barrel: darkRimMaterial, spokes: 10, spokeW: 0.055, knobs: true });
+    }
+  }
+};
+
+let currentCar = null;
+function setCar(id) {
+  const def = CAR_MODELS[id];
+  if (!def) return;
+  for (let i = car.children.length - 1; i >= 0; i--) {   // remove the old model, keep the shadow
+    const child = car.children[i];
+    if (child === shadow || child === nitroLight) continue;
+    car.remove(child);
+    child.traverse(n => { if (n.geometry && !n.isSprite) n.geometry.dispose(); });
+  }
+  wheels.length = 0;
+  bodyMaterial.color.setHex(def.body);
+  const finish = def.finish || [0.75, 0];
+  bodyMaterial.roughness = finish[0]; bodyMaterial.metalness = finish[1];
+  glassMaterial.color.setHex(def.glass);
+  Object.assign(CONFIG, def.physics);   // this car's handling
+  driftProfile = Object.assign({}, DRIFT_DEFAULT, def.drift); resetDrift();   // this car's drift feel
+  def.build();
+  buildFlames(def);
+  currentCar = id;
+  try { localStorage.setItem("arcadeDriftCar", id); } catch (_) {}
+  document.querySelectorAll("[data-car]").forEach(b => b.classList.toggle("on", b.dataset.car === id));
+}
+document.querySelectorAll("[data-car]").forEach(b => b.addEventListener("click", () => { setCar(b.dataset.car); b.blur(); }));
+let savedCar = null;
+try { savedCar = localStorage.getItem("arcadeDriftCar"); } catch (_) {}
+setCar(CAR_MODELS[savedCar] ? savedCar : "countach");
+
+// Dynamic bicycle-model state. Local frame: vx forward, vy right, yaw rate positive left.
+const state = {
+  x: 0, z: 0, heading: 0,
+  vx: 0, vy: 0, yawRate: 0,
+  steeringAngle: 0,
+  speed: 0, driftAmount: 0,
+  frontSlip: 0, rearSlip: 0, driftAngle: 0,
+  longitudinalAccel: 0, lateralAccel: 0,
+  frontLoad: 0, rearLoad: 0,
+  rearGrip: CONFIG.rearGrip,
+  thr: 0, kinetic: 0, sliding: false, rearSat: 0, flick: 0, flickKickDir: 0, flickDir: 0, flickHold: 0, flickIdle: 0,
+  y: 0, vUp: 0, air: false, airTime: 0, pitchA: 0, slope: 0, landDip: 0, shake: 0, susp: 0, suspV: 0, lastAirTime: 0, lastImpact: 0,
+  comboScore: 0, comboTime: 0, comboMult: 1, totalScore: 0, bestCombo: 0
+};
+
+// ============================================================
+// RAMPS & AIRBORNE PHYSICS
+// The ground is flat except for wedge ramps (RAMPS below; the meshes are built from the same list).
+// A ramp rises along its heading (forward = -Z at heading 0) from its foot at (x, z) to `height` at its lip, then drops off.
+// Grounded: the car follows the surface and its pitch matches the slope. Leaving the lip (or any crest) launches it with the
+// vertical speed the slope was giving it. Airborne: no tire, engine or brake forces; velocity is conserved, gravity pulls,
+// small yaw/pitch air control. Landing: impact speed drives suspension squash, camera shake, a short traction dip and a
+// small speed loss; hard landings bounce once. Ramp sides and back faces act as walls.
+// ============================================================
+const RAMPS = [
+  { x: -12, z: -38,  heading: 0,     width: 5,  length: 9,  height: 1.4 },   // small kickers next to the start
+  { x: 12,  z: -38,  heading: 0,     width: 5,  length: 9,  height: 1.4 },
+  { x: 0,   z: -80,  heading: 0,     width: 8,  length: 16, height: 3.4 },   // medium jump straight ahead
+  { x: -45, z: -130, heading: 0.3,   width: 8,  length: 14, height: 2.6 },   // angled pair
+  { x: 45,  z: -130, heading: -0.3,  width: 8,  length: 14, height: 2.6 },
+  { x: 0,   z: -215, heading: 0,     width: 12, length: 28, height: 7.5 }    // big one: hit it fast (nitro!)
+];
+for (const r of RAMPS) {
+  r.dx = -Math.sin(r.heading); r.dz = -Math.cos(r.heading);   // up-slope direction
+  r.rx = Math.cos(r.heading); r.rz = -Math.sin(r.heading);    // sideways direction
+  r.slope = r.height / r.length;
+}
+const AIR = {
+  yawControl: 2.0,        // rad/s^2 of spin from A/D in the air
+  yawDamping: 0.25,       // 1/s
+  pitchControl: 0,        // rad/s of nose down/up from W/S in the air. Off by default: it fights holding W for throttle
+  pitchAlign: 0.8,        // 1/s: how fast the nose follows the flight path
+  landAssist: 0.85,       // 0..1: how strongly the car levels out to the ground slope just before touchdown
+  landAssistHeight: 4,    // m above the ground where that levelling starts
+  pitchMax: 0.8,          // rad
+  drag: 0.02,             // 1/s: gentle air resistance
+  stepMax: 0.45,          // m: a ground step taller than this is a wall (ramp side / back face)
+  launchMin: 0.01,        // m of ground fall-away needed to leave the ground
+  wallBump: 0.25,         // fraction of speed kept (reversed) when hitting a ramp wall
+  landSpeedLoss: 0.006,   // speed fraction lost per m/s of impact
+  landPitchLoss: 0.15,    // extra loss for landing at a bad pitch angle
+  bounceAbove: 9,         // m/s impact that makes the car bounce
+  bounceRestitution: 0.18,
+  suspK: 180, suspDamp: 12   // visual suspension spring
+};
+const terrain = { h: 0, slope: 0 };
+function groundHeight(x, z) {
+  let h = 0;
+  for (let i = 0; i < RAMPS.length; i++) {
+    const r = RAMPS[i], px = x - r.x, pz = z - r.z, u = px * r.dx + pz * r.dz;
+    if (u < 0 || u > r.length || Math.abs(px * r.rx + pz * r.rz) > r.width * 0.5) continue;
+    const rh = r.height * u / r.length;
+    if (rh > h) h = rh;
+  }
+  return h;
+}
+// Surface height under (x, z) and slope along the car's heading. Inside a ramp the slope is exact (so the lip never gives a
+// spurious pitch spike); outside it is sampled at the axles, which gives a smooth pitch-up as the nose meets a ramp foot.
+function sampleTerrain(x, z, heading) {
+  let h = 0, slope = 0, inside = false;
+  for (let i = 0; i < RAMPS.length; i++) {
+    const r = RAMPS[i], px = x - r.x, pz = z - r.z, u = px * r.dx + pz * r.dz;
+    if (u < 0 || u > r.length || Math.abs(px * r.rx + pz * r.rz) > r.width * 0.5) continue;
+    const rh = r.height * u / r.length;
+    if (!inside || rh > h) { h = rh; slope = r.slope * Math.cos(heading - r.heading); inside = true; }
+  }
+  if (!inside) {
+    const sh = Math.sin(heading), ch = Math.cos(heading);
+    const gF = groundHeight(x - sh * CONFIG.cgToFrontAxle, z - ch * CONFIG.cgToFrontAxle);
+    const gR = groundHeight(x + sh * CONFIG.cgToRearAxle, z + ch * CONFIG.cgToRearAxle);
+    slope = clamp((gF - gR) / CONFIG.wheelbase, -0.4, 0.4);
+  }
+  terrain.h = h; terrain.slope = slope;
+  return terrain;
+}
+function wallBump(prevX, prevZ) {
+  state.x = prevX; state.z = prevZ;                                   // undo the move into the wall
+  sfx.bump(Math.abs(state.vx));
+  state.shake = Math.max(state.shake, clamp(Math.abs(state.vx) / 25, 0, 1));
+  state.vx *= -AIR.wallBump; state.vy *= -AIR.wallBump; state.yawRate *= 0.5;
+}
+// Grounded: stick to the surface, or launch if the ground falls away faster than a free body would drop
+function groundStep(dt, prevX, prevZ) {
+  const T = sampleTerrain(state.x, state.z, state.heading);
+  if (T.h > state.y + AIR.stepMax) { wallBump(prevX, prevZ); return; }
+  if (T.h < state.y + state.vUp * dt - 0.5 * CONFIG.gravity * dt * dt - AIR.launchMin) {
+    state.air = true; state.airTime = 0;                              // keeps y and the vertical speed the slope gave us
+    return;
+  }
+  state.vUp = (T.h - state.y) / dt;
+  state.y = T.h; state.slope = T.slope;
+}
+function land(T) {
+  const impact = Math.max(0, -state.vUp + state.vx * T.slope);        // closing speed against the surface
+  const mismatch = Math.abs(state.pitchA - Math.atan(T.slope));
+  const loss = clamp(impact * AIR.landSpeedLoss + mismatch * AIR.landPitchLoss * clamp(impact / 10, 0, 1), 0, 0.15);
+  state.vx *= 1 - loss; state.vy *= 1 - Math.min(loss * 1.5, 0.3);
+  state.y = T.h; state.slope = T.slope;
+  state.landDip = clamp((impact - 3) / 12, 0, 1);
+  state.shake = Math.max(state.shake, clamp(impact / 16, 0, 1));
+  state.suspV = -clamp(impact * 0.35, 0, 3);
+  state.lastAirTime = state.airTime; state.lastImpact = impact;
+  sfx.land(impact);
+  if (impact > AIR.bounceAbove) { state.vUp = impact * AIR.bounceRestitution; state.airTime = 0; }   // one small bounce
+  else { state.air = false; state.vUp = state.vx * T.slope; }
+}
+function updateAir(dt, prevX, prevZ) {
+  const steerIn = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
+  const pitchIn = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  // Wheels and engine keep reacting to input, but nothing pushes on the car
+  state.steeringAngle = damp(state.steeringAngle, steerIn * 0.25, 6, dt);
+  state.thr += clamp((keys.KeyW ? 1 : 0) - state.thr, -dt * 8, dt / Math.max(CONFIG.throttleRise, 0.02));
+  state.nitroOn = false; state.nitro = Math.min(1, state.nitro + dt / CONFIG.nitroRechargeTime);
+  transStep(dt, state.speed, false);                                   // keeps gear / rpm readout live in the air
+  state.handbrake = keys.Space ? 1 : 0;
+  drift.visRoll *= 0.92; drift.visPitch *= 0.92;
+  // Horizontal: velocity is conserved (body-frame coupling only because the body can spin)
+  state.yawRate += steerIn * AIR.yawControl * dt;
+  state.yawRate *= Math.exp(-AIR.yawDamping * dt);
+  const oldVx = state.vx, oldVy = state.vy;
+  state.vx += (-AIR.drag * oldVx - state.yawRate * oldVy) * dt;
+  state.vy += (-AIR.drag * oldVy + state.yawRate * oldVx) * dt;
+  const sh = Math.sin(state.heading), ch = Math.cos(state.heading);
+  state.x += (-state.vx * sh + state.vy * ch) * dt;
+  state.z += (-state.vx * ch - state.vy * sh) * dt;
+  state.heading += state.yawRate * dt;
+  // Vertical; the nose follows the flight path, then levels out to the ground slope as touchdown nears
+  state.vUp -= CONFIG.gravity * dt; state.y += state.vUp * dt; state.airTime += dt;
+  const T = sampleTerrain(state.x, state.z, state.heading);
+  const fp = Math.atan2(state.vUp, Math.max(Math.hypot(state.vx, state.vy), 1)) * (state.vx >= 0 ? 1 : -1);
+  const assist = clamp(1 - (state.y - T.h) / AIR.landAssistHeight, 0, 1) * AIR.landAssist;
+  const pitchTarget = fp + (Math.atan(T.slope) - fp) * assist;
+  state.pitchA = clamp(state.pitchA + ((pitchTarget - state.pitchA) * (AIR.pitchAlign + 6 * assist) - pitchIn * AIR.pitchControl) * dt, -AIR.pitchMax, AIR.pitchMax);
+  state.speed = Math.hypot(state.vx, state.vy);
+  state.longitudinalAccel = damp(state.longitudinalAccel, 0, 6, dt);
+  state.lateralAccel = damp(state.lateralAccel, 0, 6, dt);
+  state.driftAngle = Math.atan2(state.vy, Math.max(Math.abs(state.vx), 0.5));
+  state.driftAmount = damp(state.driftAmount, 0, 4, dt);
+  if (state.y <= T.h) {
+    if (T.h - state.y > AIR.stepMax) wallBump(prevX, prevZ);          // flew into the side / back of a ramp
+    else land(T);
+  }
+}
+
+// ============================================================
+// TRANSMISSION
+// AUTOMATIC (default): identical to the old behaviour. The gear is only derived from speed (CONFIG.gearSpeeds) for the HUD.
+// MANUAL: the selected gear now matters. Each gear tops out at CONFIG.gearSpeeds[gear] (the last gear at maxForwardSpeed).
+//   - Full power between 45% and 93% of that gear's redline; a tall gear at low speed lugs (weak); the limiter cuts power at 100%.
+//   - Shifting cuts torque for a moment. Lifting off gives engine braking, much stronger after a too-low downshift.
+// A perfectly shifted manual car accelerates like the automatic one; shifting badly costs you.
+// ============================================================
+const trans = { manual: false, gear: 1, rpm: 0, factor: 1, engBrake: 0, cut: 0 };
+let onTransChange = null;                      // UI hook (settings toggle)
+function autoGearFor(speed) {
+  const gs = CONFIG.gearSpeeds; let g = 1;
+  for (let i = 1; i < gs.length; i++) if (speed >= gs[i]) g = i + 1;
+  return g;
+}
+function gearTop(g, topScale) { const gs = CONFIG.gearSpeeds; return (g < gs.length ? gs[g] : CONFIG.maxForwardSpeed) * topScale; }
+function setTransmission(manual) {
+  if (manual && !trans.manual) trans.gear = autoGearFor(state.speed);   // take over in the gear you are in
+  trans.manual = !!manual; trans.cut = 0;
+  if (onTransChange) onTransChange();
+}
+function shiftGear(dir) {                       // +1 = up, -1 = down. Pressing it in automatic switches to manual
+  if (!trans.manual) setTransmission(true);
+  const g = clamp(trans.gear + dir, 1, CONFIG.gearSpeeds.length);
+  if (g !== trans.gear) { trans.gear = g; trans.cut = 0.12; }
+}
+function transStep(dt, speed, nitroOn) {
+  if (!trans.manual) {
+    trans.gear = autoGearFor(speed);
+    trans.rpm = speed / gearTop(trans.gear, 1); trans.factor = 1; trans.engBrake = 0;
+    return;
+  }
+  trans.cut = Math.max(0, trans.cut - dt);
+  const r = speed / gearTop(trans.gear, nitroOn ? CONFIG.nitroTopSpeedBoost : 1);     // 0..1 = standstill..redline in this gear
+  trans.rpm = r;
+  const lug = clamp(0.9 * Math.pow(gearTop(1, 1) / gearTop(trans.gear, 1), 1.3) + 0.05, 0.08, 1);   // power left at standstill in this gear
+  let f = lug + (1 - lug) * smoothstep01(r / 0.45);
+  if (r > 0.93) f *= 1 - 0.8 * clamp((r - 0.93) / 0.07, 0, 1);
+  if (r >= 1) f = 0;                                                                   // rev limiter
+  trans.factor = trans.cut > 0 ? f * 0.15 : f;
+  const rb = Math.min(r, 1.6);
+  trans.engBrake = state.thr < 0.05 && !nitroOn && state.vx > 0.8 ? CONFIG.mass * rb * (1 + 5 * Math.max(0, rb - 1)) : 0;
+}
+
+// Physical key -> internal action code (rebindable in Settings > Controls)
+const keyMap = { KeyW: "KeyW", KeyS: "KeyS", KeyA: "KeyA", KeyD: "KeyD", Space: "Space", KeyR: "KeyR" };
+const keys = Object.create(null);
+window.addEventListener("keydown", event => {
+  const act = keyMap[event.code];
+  if (act) keys[act] = true;
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
+  if (act === "KeyR") resetCar();
+  if (act === "GearUp" && !event.repeat) shiftGear(1);
+  if (act === "GearDown" && !event.repeat) shiftGear(-1);
+  if (event.code === "F3" || event.code === "Backquote") {
+    event.preventDefault();
+    CONFIG.debugOverlay = !CONFIG.debugOverlay;
+    document.getElementById("debug-overlay").style.display = CONFIG.debugOverlay ? "block" : "none";
+  }
+});
+window.addEventListener("keyup", event => { const act = keyMap[event.code]; if (act) keys[act] = false; });
+window.addEventListener("blur", () => {
+  for (const key in keys) keys[key] = false;
+  document.querySelectorAll(".touch-btn.active").forEach(button => button.classList.remove("active"));
+});
+
+// Gear + / - buttons: one shift per press
+document.querySelectorAll("#gear-controls [data-shift]").forEach(button => {
+  const dir = parseInt(button.dataset.shift, 10);
+  button.addEventListener("pointerdown", event => {
+    if (window.layoutEdit) return;
+    event.preventDefault(); shiftGear(dir); button.classList.add("active");
+  });
+  const off = () => button.classList.remove("active");
+  button.addEventListener("pointerup", off); button.addEventListener("pointerleave", off); button.addEventListener("pointercancel", off);
+  button.addEventListener("contextmenu", event => event.preventDefault());
+});
+
+// Hold buttons to keep the corresponding driving input active.
+document.querySelectorAll("#mobile-controls [data-key]").forEach(button => {
+  const key = button.dataset.key;
+  const press = event => {
+    if (window.layoutEdit) return;
+    event.preventDefault(); keys[key] = true; button.classList.add("active");
+    try { button.setPointerCapture(event.pointerId); } catch (_) {}
+  };
+  const release = event => {
+    event.preventDefault(); keys[key] = false; button.classList.remove("active");
+  };
+  button.addEventListener("pointerdown", press);
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointerleave", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("lostpointercapture", () => { keys[key] = false; button.classList.remove("active"); });
+  button.addEventListener("contextmenu", event => event.preventDefault());
+});
+
+const clamp = THREE.MathUtils.clamp;
+function damp(current, target, rate, dt) {
+  return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-rate * dt));
+}
+const FIXED_DT = 1 / CONFIG.physicsHz;
+const HALF_PI = Math.PI / 2;
+
+function pacejka(slip, B, C, D, E) {
+  const bx = B * slip;
+  return D * Math.sin(C * Math.atan(bx - E * (bx - Math.atan(bx))));
+}
+
+// Friction-circle limiter: lateral and longitudinal forces share each axle's grip budget.
+function limitAxleForces(fx, fy, normalLoad, mu) {
+  const limit = Math.max(0, normalLoad * mu);
+  const magnitude = Math.hypot(fx, fy);
+  if (magnitude > limit && magnitude > 0) {
+    const scale = limit / magnitude;
+    return { fx: fx * scale, fy: fy * scale };
+  }
+  return { fx, fy };
+}
+
+function updatePhysics(dt) {
+  const prevX = state.x, prevZ = state.z;
+  if (state.air) { updateAir(dt, prevX, prevZ); return; }   // airborne: no tire / engine forces
+  const throttle = keys.KeyW ? 1 : 0;
+  const braking = keys.KeyS ? 1 : 0;
+  const handbrake = keys.Space ? 1 : 0;
+  const steeringInput = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
+  const speed = Math.hypot(state.vx, state.vy);
+  const speedForSteering = clamp(speed / CONFIG.steeringFadeSpeed, 0, 1);
+  const maxSteer = THREE.MathUtils.lerp(
+    CONFIG.maxSteeringAngleLowSpeed, CONFIG.maxSteeringAngleHighSpeed, speedForSteering
+  );
+  let targetSteer = steeringInput * maxSteer;
+
+  const rawDriftAngle = Math.atan2(state.vy, Math.max(Math.abs(state.vx), 0.5));
+  driftUpdate(dt, handbrake, steeringInput, speed, rawDriftAngle);
+  targetSteer = driftSteerTarget(targetSteer, steeringInput, rawDriftAngle);
+  state.steeringAngle = damp(state.steeringAngle, targetSteer, CONFIG.steeringResponse, dt);
+
+  const vxSigned = state.vx;
+  const vxForSlip = Math.max(Math.abs(vxSigned), 1.0);
+  const a = CONFIG.cgToFrontAxle;
+  const b = CONFIG.cgToRearAxle;
+  // Right-positive lateral velocity, left-positive yaw rate.
+  // Slip angle = sideways wheel speed / forward wheel speed. Rolling backwards flips the steering term only.
+  const steerDir = vxSigned >= -0.3 ? 1 : vxSigned <= -1 ? -1 : 1 + (vxSigned + 0.3) * (2 / 0.7);
+  state.frontSlip = Math.atan2(state.vy - a * state.yawRate, vxForSlip) + steerDir * state.steeringAngle;
+  state.rearSlip = Math.atan2(state.vy + b * state.yawRate, vxForSlip);
+
+  const mass = CONFIG.mass;
+  const wheelbase = CONFIG.wheelbase;
+  const staticFront = mass * CONFIG.gravity * CONFIG.frontStaticLoadFraction;
+  const staticRear = mass * CONFIG.gravity * CONFIG.rearStaticLoadFraction;
+  const loadTransfer = mass * CONFIG.cgHeight * state.longitudinalAccel / wheelbase + drift.loadShift;
+  state.frontLoad = clamp(staticFront - loadTransfer, mass * CONFIG.gravity * 0.08, mass * CONFIG.gravity * 0.92);
+  state.rearLoad = clamp(staticRear + loadTransfer, mass * CONFIG.gravity * 0.08, mass * CONFIG.gravity * 0.92);
+  const totalLoad = state.frontLoad + state.rearLoad;
+  state.frontLoad *= mass * CONFIG.gravity / totalLoad;
+  state.rearLoad *= mass * CONFIG.gravity / totalLoad;
+
+  // ---- Drift model ----
+  // Scandinavian flick: a quick steer one way then snap the other way (within ~0.8 s, at speed) throws weight off the rear
+  const inDir = Math.sign(steeringInput);
+  if (inDir !== 0) {
+    state.flickIdle = 0;
+    if (inDir === state.flickDir) state.flickHold += dt;
+    else {
+      if (state.flickDir !== 0 && state.flickHold > 0.12 && state.flickHold < 0.8 && speed > 10) { state.flick = 1; state.flickKickDir = inDir; }
+      state.flickDir = inDir; state.flickHold = 0;
+    }
+  } else if ((state.flickIdle += dt) > 0.3) { state.flickDir = 0; state.flickHold = 0; }
+  state.flick = Math.max(0, state.flick - dt / CONFIG.flickDuration);
+
+  // Static -> kinetic friction with hysteresis: handbrake, power-over (wheelspin) or a big slip angle breaks the rear loose;
+  // it only grips again once the slip angle falls back under the exit threshold
+  const rearSlipAbs = Math.abs(state.rearSlip);
+  const powerOver = state.rearSat > CONFIG.slidePowerRatio && rearSlipAbs > 0.04;
+  if (speed < 4) state.sliding = false;
+  else if (!state.sliding && (rearSlipAbs > CONFIG.slideEnterSlip || powerOver || drift.engaged > 0.5 || state.flick > 0.5)) state.sliding = true;
+  else if (state.sliding && rearSlipAbs < CONFIG.slideExitSlip && !powerOver && drift.engaged < 0.2 && state.flick < 0.2) state.sliding = false;
+  state.kinetic = damp(state.kinetic, state.sliding ? 1 : 0, state.sliding ? CONFIG.kineticRise : CONFIG.kineticFall, dt);
+
+  // ---- Drift scoring: accumulate a combo while sliding; bank it when the slide ends ----
+  if (state.sliding && !state.air && speed > 4) {
+    state.comboTime += dt;
+    state.comboMult = Math.min(6, 1 + Math.floor(state.comboTime / 1.5));
+    const rate = speed * (0.4 + Math.abs(state.driftAngle)) * (1 + drift.engaged) * 30 * state.comboMult;
+    state.comboScore += rate * dt;
+  } else if (state.comboScore > 0) {
+    state.totalScore += Math.round(state.comboScore);
+    if (state.comboScore > state.bestCombo) {
+      state.bestCombo = Math.round(state.comboScore);
+      try { localStorage.setItem("carZBestDriftCombo", String(state.bestCombo)); } catch (_) {}
+    }
+    state.comboScore = 0; state.comboTime = 0; state.comboMult = 1;
+  }
+
+  // Throttle builds up over time, so tapping the gas feathers the power (and the drift angle)
+  const thrTarget = (throttle || keys.ShiftLeft && state.nitro > 0 && !state.nitroLocked && !braking) ? 1 : 0;
+  state.thr += clamp(thrTarget - state.thr, -dt * 8, dt / Math.max(CONFIG.throttleRise, 0.02));
+
+  const frontMu = CONFIG.frontGrip * (1 - 0.35 * state.landDip);                           // brief traction dip after a hard landing
+  let rearMu = CONFIG.rearGrip * drift.grip * (1 - 0.45 * drift.over) * (1 - 0.35 * state.landDip);                     // drift module: smooth grip loss/recovery
+  rearMu *= 1 - (1 - CONFIG.kineticGrip) * state.kinetic;                  // static -> kinetic friction drop
+  rearMu *= 1 - CONFIG.driftThrottleGain * state.kinetic * state.thr;      // wheelspin eats lateral grip: more gas = more angle
+  rearMu *= 1 - CONFIG.flickGripDrop * state.flick;                        // weight thrown off the rear inside tire
+  let frontFy = -pacejka(state.frontSlip, CONFIG.frontTireB, CONFIG.frontTireC, CONFIG.frontTireD, CONFIG.frontTireE) * state.frontLoad * frontMu;
+  let rearFy = -pacejka(state.rearSlip, CONFIG.rearTireB, CONFIG.rearTireC, CONFIG.rearTireD, CONFIG.rearTireE) * state.rearLoad * rearMu;
+
+  // Drive and brake forces
+  const sgn = clamp(state.vx, -1, 1);
+  let drive = 0, brake = 0;
+  // Nitro: hold to add thrust and top speed while the tank lasts; the tank refills when released
+  // The nitro button works on its own (no need to also hold gas) and is ignored while braking/reversing.
+  // Once the tank runs dry it stays off until the button is released, so it can't stutter on and off.
+  if (!keys.ShiftLeft) state.nitroLocked = false;
+  const nitroOn = !!keys.ShiftLeft && !state.nitroLocked && state.nitro > 0 && !braking;
+  state.nitro = clamp(state.nitro + (nitroOn ? -dt / CONFIG.nitroDuration : dt / CONFIG.nitroRechargeTime), 0, 1);
+  if (nitroOn && state.nitro <= 0) state.nitroLocked = true;
+  state.nitroOn = nitroOn;
+  transStep(dt, speed, nitroOn);
+  if (throttle || nitroOn || state.thr > 0.02) {
+    const nitroForce = nitroOn ? CONFIG.nitroForceBoost : 1;
+    const topSpeed = CONFIG.maxForwardSpeed * (nitroOn ? CONFIG.nitroTopSpeedBoost : 1);
+    drive = CONFIG.engineForce * CONFIG.drivetrainEfficiency * nitroForce * clamp(1 - state.vx / topSpeed, 0, 1) * state.thr * trans.factor;
+    if (state.vx < -0.8) brake = CONFIG.brakeForce;
+  }
+  drive += drift.boostForce;   // optional drift-exit mini-boost (0 unless fired; never past top speed)
+  if (braking) {
+    if (state.vx > 0.8) brake = CONFIG.brakeForce;
+    else drive = -CONFIG.engineForce * 0.6 * clamp(1 + state.vx / CONFIG.maxReverseSpeed, 0, 1);
+  }
+  const frontFx = -brake * CONFIG.frontBrakeBias * sgn + drive * CONFIG.driveFrontShare - trans.engBrake * CONFIG.driveFrontShare * sgn;
+  const rearFx = drive * (1 - CONFIG.driveFrontShare) - brake * (1 - CONFIG.frontBrakeBias) * sgn - handbrake * CONFIG.brakeForce * 0.35 * sgn
+    - trans.engBrake * (1 - CONFIG.driveFrontShare) * sgn;
+
+  // Friction circle: drive/brake force eats into cornering grip
+  const f = limitAxleForces(frontFx, frontFy, state.frontLoad, frontMu);
+  const r = limitAxleForces(rearFx, rearFy, state.rearLoad, rearMu);
+  state.rearSat = Math.abs(rearFx) / Math.max(state.rearLoad * rearMu, 1);
+
+  // Tire forces into the car body frame (front tires are steered)
+  const cd = Math.cos(state.steeringAngle), sd = Math.sin(state.steeringAngle);
+  const frontBodyFy = f.fy * cd - f.fx * sd;
+  const fxBody = f.fx * cd + f.fy * sd + r.fx;
+  const fyBody = frontBodyFy + r.fy;
+
+  // Drag and rolling resistance
+  const k = 0.5 * CONFIG.airDensity * CONFIG.aeroDragCoefficient * CONFIG.frontalArea;
+  const spd = Math.hypot(state.vx, state.vy);
+  const resist = k * spd + CONFIG.rollingResistance / Math.max(spd, 1);
+
+  const keepK = driftMomentum(fyBody, spd) / (CONFIG.mass * Math.max(spd, 0.1));
+  const ax = (fxBody - resist * state.vx) / CONFIG.mass + keepK * state.vx - CONFIG.gravity * state.slope;   // slope: climbing slows, rolling down speeds up
+  const ay = (fyBody - resist * state.vy) / CONFIG.mass + keepK * state.vy;
+  const mz = -CONFIG.cgToFrontAxle * frontBodyFy + CONFIG.cgToRearAxle * r.fy - state.yawRate * CONFIG.yawDamping
+    + CONFIG.flickKick * CONFIG.yawInertia * state.flick * state.flickKickDir
+    + drift.yawKick * CONFIG.yawInertia - state.yawRate * CONFIG.yawDamping * driftProfile.stability * drift.cs;
+
+  const oldVx = state.vx, oldVy = state.vy;
+  state.vx += (ax - state.yawRate * oldVy) * dt;
+  state.vy += (ay + state.yawRate * oldVx) * dt;
+  state.yawRate += (mz / CONFIG.yawInertia) * dt;
+
+  // Settle the car when it is nearly stopped
+  if (spd < 1.5 && !throttle && !nitroOn && !braking) {
+    const settle = 1 / (1 + 8 * dt);
+    state.vy *= settle; state.yawRate *= settle;
+    if (spd < 0.15) { state.vx = 0; state.vy = 0; }
+  }
+
+  // Move the car (forward = -Z at heading 0, heading grows to the left)
+  const sh = Math.sin(state.heading), ch = Math.cos(state.heading);
+  state.x += (-state.vx * sh + state.vy * ch) * dt;
+  state.z += (-state.vx * ch - state.vy * sh) * dt;
+  state.heading += state.yawRate * dt;
+
+  state.speed = Math.hypot(state.vx, state.vy);
+  state.longitudinalAccel = damp(state.longitudinalAccel, ax, 14, dt);
+  state.lateralAccel = damp(state.lateralAccel, ay, 14, dt);
+  state.driftAngle = Math.atan2(state.vy, Math.max(Math.abs(state.vx), 0.5));
+  const driftTarget = state.speed > 4 ? clamp(Math.abs(state.driftAngle) / 0.6, 0, 1) : 0;
+  state.driftAmount = damp(state.driftAmount, driftTarget, 8, dt);
+  state.handbrake = handbrake;
+  state.landDip = Math.max(0, state.landDip - dt / 0.5);
+  groundStep(dt, prevX, prevZ);                                          // follow the surface or launch off a lip
+  if (!state.air) state.pitchA = damp(state.pitchA, Math.atan(state.slope), 14, dt);
+}
+
+// Arrow keys work like WASD
+const keyAlias = { ArrowUp: "KeyW", ArrowDown: "KeyS", ArrowLeft: "KeyA", ArrowRight: "KeyD" };
+window.addEventListener("keydown", e => { if (keyAlias[e.code]) keys[keyAlias[e.code]] = true; });
+window.addEventListener("keyup", e => { if (keyAlias[e.code]) keys[keyAlias[e.code]] = false; });
+
+// ---------- Ramp meshes (built from the same RAMPS list the physics uses) ----------
+const rampStripeTex = (() => {
+  const c = document.createElement("canvas"); c.width = 32; c.height = 64;
+  const g = c.getContext("2d");
+  g.fillStyle = "#f2a516"; g.fillRect(0, 0, 32, 64);
+  g.fillStyle = "#23272c"; g.fillRect(0, 0, 32, 32);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const rampSlopeMat = new THREE.MeshStandardMaterial({ map: rampStripeTex, roughness: 0.85, metalness: 0 });
+const rampBodyMat = new THREE.MeshStandardMaterial({ color: 0x2d343a, roughness: 0.95, metalness: 0 });
+const rampLipMat = new THREE.MeshBasicMaterial({ color: 0xffef9a });
+for (const r of RAMPS) {
+  const w = r.width / 2, L = r.length, H = r.height, V = Math.hypot(L, H) / 2.5;   // stripe repeats every 2.5 m
+  const P = [], UV = [];
+  const tri = (a, b, c, ua, ub, uc) => { P.push(...a, ...b, ...c); UV.push(...ua, ...ub, ...uc); };
+  tri([-w, 0, 0], [w, 0, 0], [w, H, -L], [0, 0], [1, 0], [1, V]);                    // slope (group 0)
+  tri([-w, 0, 0], [w, H, -L], [-w, H, -L], [0, 0], [1, V], [0, V]);
+  const slopeVerts = P.length / 3;
+  const z2 = [0, 0], z3 = [0, 0], z4 = [0, 0];
+  tri([-w, 0, -L], [-w, H, -L], [w, H, -L], z2, z3, z4);                              // back face (group 1)
+  tri([-w, 0, -L], [w, H, -L], [w, 0, -L], z2, z3, z4);
+  tri([-w, 0, 0], [-w, H, -L], [-w, 0, -L], z2, z3, z4);                              // left side
+  tri([w, 0, 0], [w, 0, -L], [w, H, -L], z2, z3, z4);                                 // right side
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(UV, 2));
+  geo.addGroup(0, slopeVerts, 0); geo.addGroup(slopeVerts, P.length / 3 - slopeVerts, 1);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, [rampSlopeMat, rampBodyMat]);
+  mesh.position.set(r.x, 0, r.z); mesh.rotation.y = r.heading;
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(r.width, 0.08, 0.3), rampLipMat);   // bright lip so the edge reads from far away
+  lip.position.set(0, H - 0.1 * r.slope + 0.03, -L + 0.1); lip.rotation.x = Math.atan(r.slope);
+  mesh.add(lip);
+  scene.add(mesh);
+}
+
+// ---------- Tire smoke (pooled sprites) ----------
+const smokeTexture = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d"), grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, "rgba(255,255,255,1)"); grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const smokePool = [];
+for (let i = 0; i < CONFIG.smokeParticleCount; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTexture, transparent: true, depthWrite: false, opacity: 0, color: 0xe2e2e2 }));
+  s.visible = false; s.userData = { age: 0, life: 1, alpha: 1 };
+  scene.add(s); smokePool.push(s);
+}
+let smokeIndex = 0, smokeTimer = 0;
+function spawnSmoke(x, z, alpha) {
+  const s = smokePool[smokeIndex++ % smokePool.length];
+  s.position.set(x + (Math.random() - 0.5) * 0.4, 0.3 + state.y, z + (Math.random() - 0.5) * 0.4);
+  s.scale.setScalar(0.8); s.visible = true;
+  s.userData.age = 0; s.userData.life = CONFIG.smokeLifetime * (0.8 + Math.random() * 0.4); s.userData.alpha = alpha;
+}
+
+// ---------- Skid marks (ring buffer of flat quads) ----------
+const skidGeo = new THREE.PlaneGeometry(0.32, 0.9).rotateX(-Math.PI / 2);
+const skidMat = new THREE.MeshBasicMaterial({ color: 0x0a0b0c, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+const skids = [];
+let skidIndex = 0, lastSkidX = 1e9, lastSkidZ = 1e9;
+function addSkid(x, z, angle) {
+  let m;
+  if (skids.length < CONFIG.skidMarkLimit) { m = new THREE.Mesh(skidGeo, skidMat); scene.add(m); skids.push(m); }
+  else m = skids[skidIndex++ % skids.length];
+  m.position.set(x, 0.005, z); m.rotation.y = angle;
+}
+
+// ---------- Camera with touch / mouse free look ----------
+let camY = 0, camZoom = 1, camYaw = 0, lookYaw = 0, lookPitch = 0, lastLookTime = -99, lookPointerId = null, lastX = 0, lastY = 0;
+const camRadius = Math.hypot(CONFIG.cameraDistance, CONFIG.cameraHeight);
+const baseElev = Math.atan2(CONFIG.cameraHeight, CONFIG.cameraDistance);
+const canvasEl = renderer.domElement;
+canvasEl.addEventListener("pointerdown", e => {
+  if (window.layoutEdit) return;
+  const isTouch = e.pointerType === "touch";
+  if (lookPointerId !== null) return;
+  if (isTouch && e.clientX < innerWidth / 2) return;   // left half is for steering
+  if (!isTouch && e.button !== 0) return;
+  lookPointerId = e.pointerId; lastX = e.clientX; lastY = e.clientY; lastLookTime = performance.now();
+  try { canvasEl.setPointerCapture(e.pointerId); } catch (_) {}
+});
+canvasEl.addEventListener("pointermove", e => {
+  if (e.pointerId !== lookPointerId) return;
+  lookYaw -= (e.clientX - lastX) * CONFIG.cameraLookSensitivity;   // drag right = look right
+  lookPitch = clamp(lookPitch + (e.clientY - lastY) * CONFIG.cameraLookSensitivity, 0.08 - baseElev, 1.3 - baseElev);
+  lastX = e.clientX; lastY = e.clientY; lastLookTime = performance.now();
+});
+const endLook = e => { if (e.pointerId === lookPointerId) { lookPointerId = null; lastLookTime = performance.now(); } };
+canvasEl.addEventListener("pointerup", endLook);
+canvasEl.addEventListener("pointercancel", endLook);
+canvasEl.addEventListener("contextmenu", e => e.preventDefault());
+
+let nitroFx = 0, nitroFxT = 1;   // nitroFx: 0..1 smoothed "nitro is firing"; nitroFxT: tank level the flame color follows
+function updateCamera(dt) {
+  // Follow the car's heading with a little lag
+  const diff = Math.atan2(Math.sin(state.heading - camYaw), Math.cos(state.heading - camYaw));
+  camYaw += diff * (1 - Math.exp(-CONFIG.cameraSmoothness * dt));
+  // Ease the free-look offset back to the chase position after 1.5 s without touch
+  if (lookPointerId === null && performance.now() - lastLookTime > 1500) {
+    lookYaw = damp(lookYaw, 0, 3, dt); lookPitch = damp(lookPitch, 0, 3, dt);
+  }
+  camY = damp(camY, state.y, state.air ? 3 : 10, dt);                  // follows jumps with a little lag
+  const yaw = camYaw + lookYaw, elev = baseElev + lookPitch;
+  const rad = camRadius * camZoom * (1 + 0.08 * nitroFx);       // pulls back a little under boost
+  camera.position.set(
+    state.x + Math.sin(yaw) * Math.cos(elev) * rad,
+    1 + camY + Math.sin(elev) * rad,
+    state.z + Math.cos(yaw) * Math.cos(elev) * rad
+  );
+  camera.lookAt(
+    state.x - Math.sin(state.heading) * CONFIG.cameraLookAhead, 1.0 + camY,
+    state.z - Math.cos(state.heading) * CONFIG.cameraLookAhead
+  );
+  // Nitro: wider field of view plus a medium-strength rumble
+  const fov = 65 + 11 * nitroFx;
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  if (nitroFx > 0.01) {
+    const amp = 0.045 * nitroFx;
+    camera.position.x += (Math.random() - 0.5) * 2 * amp;
+    camera.position.y += (Math.random() - 0.5) * 2 * amp;
+    camera.position.z += (Math.random() - 0.5) * 2 * amp;
+    camera.rotateZ((Math.random() - 0.5) * 0.012 * nitroFx);
+  }
+  if (state.shake > 0.01) {                                             // landing / wall impact shake
+    const amp = 0.16 * state.shake;
+    camera.position.x += (Math.random() - 0.5) * 2 * amp;
+    camera.position.y += (Math.random() - 0.5) * 2 * amp;
+    camera.position.z += (Math.random() - 0.5) * 2 * amp;
+    state.shake = Math.max(0, state.shake - dt * 2.5);
+  }
+}
+
+// ---------- Visuals, effects, HUD ----------
+car.rotation.order = "YXZ";
+let roll = 0, pitch = 0;
+const el = id => document.getElementById(id);
+const speedEl = el("speed"), gearEl = el("gear"), driftEl = el("drift-indicator"), debugEl = el("debug-overlay");
+const gearSpeeds = [0, 12, 22, 32, 43, 53];
+
+let nitroFxEnabled = true;
+try { nitroFxEnabled = localStorage.getItem("arcadeDriftNitroFx") !== "0"; } catch (_) {}
+try { state.bestCombo = parseInt(localStorage.getItem("carZBestDriftCombo") || "0", 10) || 0; } catch (_) {}
+const _flameCol = new THREE.Color(), _coreCol = new THREE.Color();
+function updateNitroFx(dt) {
+  const target = state.nitroOn && nitroFxEnabled ? 1 : 0;
+  nitroFx = damp(nitroFx, target, target > nitroFx ? 14 : 7, dt);      // snaps on, fades out
+  if (state.nitroOn) nitroFxT = state.nitro;
+  const on = nitroFx > 0.02;
+  nitroLight.intensity = on ? 18 * nitroFx * (0.85 + Math.random() * 0.3) : 0;
+  for (const f of flames) f.g.visible = on;
+  if (!on) return;
+  nitroColorAt(nitroFxT, _flameCol);
+  _coreCol.copy(_flameCol).lerp(WHITE, 0.65);
+  flameOuterMat.color.copy(_flameCol); flameCoreMat.color.copy(_coreCol);
+  flameGlowMat.color.copy(_flameCol); flameGlowMat.opacity = 0.9 * nitroFx;
+  nitroLight.color.copy(_flameCol);
+  const t = performance.now() / 1000;
+  for (const f of flames) {
+    const flick = 0.85 + 0.15 * Math.sin(t * 70 + f.phase) + 0.12 * Math.random();
+    const len = 1.25 * nitroFx * flick, r = f.r * (0.9 + 0.2 * Math.random());
+    f.outer.scale.set(r, r, len);
+    f.core.scale.set(r * 0.55, r * 0.55, len * 0.6);
+    f.glow.scale.setScalar(0.7 * nitroFx * (0.9 + 0.2 * Math.random()));
+  }
+}
+
+function updateVisuals(dt) {
+  updateNitroFx(dt);
+  state.suspV += (-AIR.suspK * state.susp - AIR.suspDamp * state.suspV) * dt;   // landing squash spring (visual only)
+  state.susp = clamp(state.susp + state.suspV * dt, -0.4, 0.3);
+  car.position.set(state.x, state.y + state.susp, state.z);
+  car.rotation.y = state.heading;
+  const gT = sampleTerrain(state.x, state.z, state.heading), above = Math.max(0, state.y - gT.h);
+  shadow.position.set(state.x, gT.h + 0.02, state.z);                  // blob shadow stays on the ground below the car
+  shadow.rotation.set(Math.atan(gT.slope), state.heading, 0);
+  shadow.scale.setScalar(1 + above * 0.1);
+  shadow.material.opacity = clamp(1 - above / 7, 0.2, 1);
+  roll = damp(roll, clamp(state.lateralAccel * CONFIG.rollGain, -CONFIG.rollMax, CONFIG.rollMax) + drift.visRoll, 10, dt);
+  pitch = damp(pitch, clamp(state.longitudinalAccel * CONFIG.pitchGain, -CONFIG.pitchMax, CONFIG.pitchMax) + drift.visPitch, 10, dt);
+  car.rotation.z = roll; car.rotation.x = pitch + state.pitchA;
+  for (const w of wheels) {
+    if (w.isFront) w.pivot.rotation.y = state.steeringAngle;
+    if (!(state.handbrake && !w.isFront)) w.mesh.rotation.x -= (state.vx / CONFIG.wheelRadius) * dt;  // locked rears under handbrake
+  }
+  rearLightMaterial.color.setHex(keys.KeyS && state.vx > 0.8 ? 0xff6a5a : 0xb01818);  // brake lights
+
+  // Rear tire world positions
+  const sh = Math.sin(state.heading), ch = Math.cos(state.heading);
+  const rear = [-carLayout.track, carLayout.track].map(lx => ({ x: state.x + lx * ch + carLayout.rearZ * sh, z: state.z - lx * sh + carLayout.rearZ * ch }));
+
+  const sliding = !state.air && state.speed > 4 && (Math.abs(state.rearSlip) > CONFIG.rearSlipSmokeThreshold || state.kinetic > 0.5 || (state.handbrake && state.speed > 6));
+  const marking = !state.air && state.y < 0.05 && state.speed > 3 && (Math.abs(state.rearSlip) > CONFIG.rearSlipMarkThreshold || state.kinetic > 0.5 || (state.handbrake && state.speed > 5));
+
+  smokeTimer += dt;
+  if (sliding && smokeTimer > CONFIG.smokeSpawnInterval) {
+    smokeTimer = 0;
+    const alpha = clamp(Math.abs(state.rearSlip) / 0.5, 0.35, 1);
+    rear.forEach(p => spawnSmoke(p.x, p.z, alpha));
+  }
+  for (const s of smokePool) {
+    if (!s.visible) continue;
+    s.userData.age += dt;
+    const t = s.userData.age / s.userData.life;
+    if (t >= 1) { s.visible = false; continue; }
+    s.scale.setScalar(0.8 + t * 3.2);
+    s.material.opacity = 0.5 * (1 - t) * s.userData.alpha;
+    s.position.y += dt * 0.8;
+  }
+
+  if (marking && Math.hypot(state.x - lastSkidX, state.z - lastSkidZ) > 0.6) {
+    lastSkidX = state.x; lastSkidZ = state.z;
+    const wvx = -state.vx * sh + state.vy * ch, wvz = -state.vx * ch - state.vy * sh;
+    const ang = Math.atan2(-wvx, -wvz);
+    rear.forEach(p => addSkid(p.x, p.z, ang));
+  }
+}
+
+// ---------- Round speedometer gauge (arcs, ticks and numbers are generated here) ----------
+const GAUGE_MAX = 240, GAUGE_START = 135, GAUGE_SWEEP = 270, SVGNS = "http://www.w3.org/2000/svg";
+const gaugePt = (r, deg) => [100 + r * Math.cos(deg * Math.PI / 180), 100 + r * Math.sin(deg * Math.PI / 180)];
+function gaugeArc(r, from, to) {
+  const [x0, y0] = gaugePt(r, from), [x1, y1] = gaugePt(r, to);
+  return "M" + x0.toFixed(2) + " " + y0.toFixed(2) + " A" + r + " " + r + " 0 " + (Math.abs(to - from) > 180 ? 1 : 0) + " " + (to > from ? 1 : 0) + " " + x1.toFixed(2) + " " + y1.toFixed(2);
+}
+const mainArc = gaugeArc(90, GAUGE_START, GAUGE_START + GAUGE_SWEEP), driftArcPath = gaugeArc(90, 120, 60);
+el("g-track").setAttribute("d", mainArc);
+el("g-progress").setAttribute("d", mainArc);
+el("g-drift-track").setAttribute("d", driftArcPath);
+el("g-drift").setAttribute("d", driftArcPath);
+const svgEl = (name, attrs) => { const n = document.createElementNS(SVGNS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+for (let i = 0; i <= 24; i++) {
+  const deg = GAUGE_START + GAUGE_SWEEP * i / 24, major = i % 4 === 0;
+  const [x0, y0] = gaugePt(major ? 71 : 77, deg), [x1, y1] = gaugePt(84, deg);
+  el("g-ticks").appendChild(svgEl("line", { x1: x0, y1: y0, x2: x1, y2: y1, class: major ? "g-tick major" : "g-tick" }));
+  if (major) {
+    const [tx, ty] = gaugePt(58, deg);
+    const label = svgEl("text", { x: tx, y: ty, class: "g-num", "dominant-baseline": "central" });
+    label.textContent = String(i * 10);
+    el("g-ticks").appendChild(label);
+  }
+}
+const progressEl = el("g-progress"), driftArcEl = el("g-drift"), needleEl = el("g-needle");
+const nitroMeterEl = el("nitro-meter"), nitroFillEl = el("nitro-fill");
+
+function updateHud() {
+  speedEl.textContent = String(Math.round(state.speed * 3.6)).padStart(3, "0");
+  let gear = "N";
+  if (state.vx < -0.5) gear = "R";
+  else if (trans.manual) gear = "M" + trans.gear;
+  else if (state.speed > 0.5) gear = "D" + trans.gear;
+  gearEl.textContent = gear;
+  gearEl.style.fill = trans.manual && trans.rpm > 0.93 && state.vx > 0 ? "#ff5a5a" : "";   // red = near the limiter, shift up
+  const f = clamp(state.speed * 3.6 / GAUGE_MAX, 0, 1);
+  progressEl.setAttribute("stroke-dashoffset", (1 - f).toFixed(4));
+  progressEl.style.opacity = f > 0.004 ? 1 : 0;
+  needleEl.setAttribute("transform", "rotate(" + (GAUGE_START + GAUGE_SWEEP * f).toFixed(1) + " 100 100)");
+  driftArcEl.setAttribute("stroke-dashoffset", (1 - state.driftAmount).toFixed(3));
+  driftArcEl.style.opacity = state.driftAmount > 0.01 ? 1 : 0;
+  driftEl.textContent = drift.boostT > 0 ? "BOOST" : drift.charge >= driftProfile.boostMinCharge ? "DRIFT+" : "DRIFT";
+  driftEl.style.opacity = state.driftAmount > 0.3 || drift.boostT > 0 ? 1 : 0;
+  nitroFillEl.style.width = (state.nitro * 100).toFixed(1) + "%";
+  nitroMeterEl.classList.toggle("on", !!state.nitroOn);
+  if (CONFIG.debugOverlay) {
+    debugEl.textContent =
+      "speed   " + (state.speed * 3.6).toFixed(0) + " km/h\n" +
+      "front α " + (state.frontSlip * 57.3).toFixed(1) + "°\n" +
+      "rear α  " + (state.rearSlip * 57.3).toFixed(1) + "°\n" +
+      "drift   " + (state.driftAngle * 57.3).toFixed(1) + "°  kinetic " + state.kinetic.toFixed(2) + "  flick " + state.flick.toFixed(2) + "  throttle " + state.thr.toFixed(2) + "\n" +
+      "yaw     " + state.yawRate.toFixed(2) + " rad/s\n" +
+      "alt     " + state.y.toFixed(2) + " m  vUp " + state.vUp.toFixed(1) + (state.air ? "  AIR " + state.airTime.toFixed(2) + "s" : "") + "  last " + state.lastAirTime.toFixed(1) + "s / " + state.lastImpact.toFixed(1) + " m/s\n" +
+      "rear mu x" + drift.grip.toFixed(2) + "  cs " + drift.cs.toFixed(2) + "  over " + drift.over.toFixed(2) + "  charge " + drift.charge.toFixed(2) + "\n" +
+      "F load  " + state.frontLoad.toFixed(0) + " N\n" +
+      "R load  " + state.rearLoad.toFixed(0) + " N";
+  }
+  const ds = el("drift-score");
+  if (state.comboScore > 0) {
+    ds.innerHTML = 'DRIFT <span class="mult">x' + state.comboMult + '</span> ' + Math.round(state.comboScore) + ' <span class="best">BEST ' + state.bestCombo + '</span>';
+  } else {
+    ds.innerHTML = 'DRIFT ' + state.totalScore + ' <span class="best">BEST ' + state.bestCombo + '</span>';
+  }
+}
+
+function resetCar() {
+  Object.assign(state, { x: 0, z: 0, heading: 0, vx: 0, vy: 0, yawRate: 0, steeringAngle: 0, speed: 0,
+    driftAmount: 0, frontSlip: 0, rearSlip: 0, driftAngle: 0, longitudinalAccel: 0, lateralAccel: 0, nitro: 1, nitroOn: false, nitroLocked: false,
+    thr: 0, kinetic: 0, sliding: false, rearSat: 0, flick: 0, flickKickDir: 0, flickDir: 0, flickHold: 0, flickIdle: 0,
+    y: 0, vUp: 0, air: false, airTime: 0, pitchA: 0, slope: 0, landDip: 0, shake: 0, susp: 0, suspV: 0,
+    comboScore: 0, comboTime: 0, comboMult: 1, totalScore: 0 });
+  camYaw = 0; lookYaw = 0; lookPitch = 0; camY = 0;
+  resetDrift();
+  trans.gear = 1; trans.cut = 0;
+}
+el("reset").addEventListener("click", e => { resetCar(); e.currentTarget.blur(); });
+
+window.addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- Settings panel: fullscreen, drift assist, camera distance ----------
+const settingsBtn = el("settings-btn"), settingsPanel = el("settings-panel");
+const fsBtn = el("fs-toggle"), fsNote = el("fs-note"), assistBtn = el("assist-toggle");
+settingsBtn.addEventListener("click", () => { settingsPanel.classList.toggle("open"); settingsBtn.blur(); });
+canvasEl.addEventListener("pointerdown", () => settingsPanel.classList.remove("open"));
+
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+const rootEl = document.documentElement;
+const fsSupported = !!(rootEl.requestFullscreen || rootEl.webkitRequestFullscreen);
+function syncFullscreen() {
+  const on = !!fsElement();
+  fsBtn.textContent = on ? "ON" : "OFF";
+  fsBtn.classList.toggle("on", on);
+  if (on) fsNote.textContent = "";
+}
+fsBtn.addEventListener("click", async () => {
+  if (!fsSupported) {
+    fsNote.textContent = "Fullscreen isn't supported here. On iPhone use Share > Add to Home Screen.";
+    return;
+  }
+  try {
+    if (!fsElement()) await (rootEl.requestFullscreen ? rootEl.requestFullscreen() : rootEl.webkitRequestFullscreen());
+    else await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen());
+  } catch (err) {
+    fsNote.textContent = "Couldn't switch fullscreen in this browser.";
+  }
+  syncFullscreen();
+  fsBtn.blur();
+});
+document.addEventListener("fullscreenchange", syncFullscreen);
+document.addEventListener("webkitfullscreenchange", syncFullscreen);
+
+assistBtn.addEventListener("click", () => {
+  CONFIG.countersteerAssist = !CONFIG.countersteerAssist;
+  assistBtn.textContent = CONFIG.countersteerAssist ? "ON" : "OFF";
+  assistBtn.classList.toggle("on", CONFIG.countersteerAssist);
+  assistBtn.blur();
+});
+const transBtn = el("trans-toggle");
+function syncTrans() {
+  transBtn.textContent = trans.manual ? "MANUAL" : "AUTO";
+  transBtn.classList.toggle("on", trans.manual);
+  document.body.classList.toggle("manual-trans", trans.manual);
+  try { localStorage.setItem("arcadeDriftTrans", trans.manual ? "manual" : "auto"); } catch (_) {}
+}
+try { if (localStorage.getItem("arcadeDriftTrans") === "manual") trans.manual = true; } catch (_) {}
+onTransChange = syncTrans; syncTrans();
+transBtn.addEventListener("click", () => { setTransmission(!trans.manual); transBtn.blur(); });
+const fxBtn = el("fx-toggle");
+function syncFxBtn() { fxBtn.textContent = nitroFxEnabled ? "ON" : "OFF"; fxBtn.classList.toggle("on", nitroFxEnabled); }
+syncFxBtn();
+fxBtn.addEventListener("click", () => {
+  nitroFxEnabled = !nitroFxEnabled;
+  try { localStorage.setItem("arcadeDriftNitroFx", nitroFxEnabled ? "1" : "0"); } catch (_) {}
+  syncFxBtn(); fxBtn.blur();
+});
+el("cam-zoom").addEventListener("input", e => {
+  camZoom = parseFloat(e.target.value);
+  el("zoom-val").textContent = camZoom.toFixed(1) + "x";
+});
+
+// ---------- Controls customization: rebindable keys, touch size/opacity/look speed, draggable buttons ----------
+const ACTIONS = [
+  { id: "gas", name: "Gas", internal: "KeyW" }, { id: "brake", name: "Brake / reverse", internal: "KeyS" },
+  { id: "left", name: "Steer left", internal: "KeyA" }, { id: "right", name: "Steer right", internal: "KeyD" },
+  { id: "handbrake", name: "Handbrake", internal: "Space" }, { id: "reset", name: "Reset car", internal: "KeyR" },
+  { id: "nitro", name: "Nitro boost", internal: "ShiftLeft" },
+  { id: "shiftUp", name: "Gear up (+)", internal: "GearUp" }, { id: "shiftDown", name: "Gear down (\u2212)", internal: "GearDown" }
+];
+const DEFAULT_BIND = { gas: "KeyW", brake: "KeyS", left: "KeyA", right: "KeyD", handbrake: "Space", reset: "KeyR", nitro: "ShiftLeft", shiftUp: "KeyE", shiftDown: "KeyQ" };
+const bindings = Object.assign({}, DEFAULT_BIND);
+const ctl = { size: 1, opacity: 1, look: 1 };
+const BASE_LOOK = CONFIG.cameraLookSensitivity;
+const DRAG_IDS = ["steering-controls", "handbrake-btn", "nitro-btn", "gear-controls", "pedal-controls", "hud"];
+const pos = {};
+let rebindAction = null;
+const hudCfg = { show: { gauge: true, gear: true, drift: true, nitro: true, help: true, status: true, reset: true }, scale: 1, opacity: 1 };
+window.layoutEdit = false;
+const STORE_KEY = "arcadeDriftControls";
+
+const KEY_NAMES = { Space: "Space", ArrowUp: "\u2191", ArrowDown: "\u2193", ArrowLeft: "\u2190", ArrowRight: "\u2192", ShiftLeft: "L-Shift", ShiftRight: "R-Shift", ControlLeft: "L-Ctrl", ControlRight: "R-Ctrl", Enter: "Enter", Tab: "Tab", Backspace: "Bksp" };
+const keyLabel = c => KEY_NAMES[c] || (c.startsWith("Key") ? c.slice(3) : c.startsWith("Digit") ? c.slice(5) : c.startsWith("Numpad") ? "Num" + c.slice(6) : c);
+
+function saveControls() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ bind: bindings, size: ctl.size, opacity: ctl.opacity, look: ctl.look, pos, hud: hudCfg })); } catch (_) {}
+}
+function loadControls() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (!d) return;
+    Object.assign(bindings, d.bind || {});
+    ctl.size = d.size || 1; ctl.opacity = d.opacity || 1; ctl.look = d.look || 1;
+    Object.assign(pos, d.pos || {});
+    if (d.hud) {
+      Object.assign(hudCfg.show, d.hud.show || {});
+      hudCfg.scale = d.hud.scale || 1;
+      hudCfg.opacity = d.hud.opacity ?? 1;
+    }
+  } catch (_) {}
+}
+function rebuildKeyMap() {
+  for (const k in keyMap) delete keyMap[k];
+  for (const a of ACTIONS) keyMap[bindings[a.id]] = a.internal;
+  for (const k in keys) keys[k] = false;
+}
+function assignKey(action, code) {
+  const other = Object.keys(bindings).find(a => a !== action && bindings[a] === code);
+  if (other) bindings[other] = bindings[action];
+  bindings[action] = code;
+  rebuildKeyMap(); saveControls();
+}
+function renderBindings() {
+  const list = el("bind-list");
+  list.textContent = "";
+  for (const a of ACTIONS) {
+    const row = document.createElement("div"); row.className = "set-row";
+    const name = document.createElement("span"); name.textContent = a.name;
+    const btn = document.createElement("button"); btn.className = "toggle" + (rebindAction === a.id ? " on" : "");
+    btn.textContent = rebindAction === a.id ? "Press key\u2026" : keyLabel(bindings[a.id]);
+    btn.addEventListener("click", () => { rebindAction = rebindAction === a.id ? null : a.id; renderBindings(); btn.blur(); });
+    row.append(name, btn); list.appendChild(row);
+  }
+}
+function renderHelp() {
+  const k = id => '<span class="key">' + keyLabel(bindings[id]) + "</span>";
+  el("help").innerHTML =
+    "<div>" + k("gas") + " Accelerate</div><div>" + k("brake") + " Brake / Reverse</div><div>" + k("left") + k("right") + " Steer</div>" +
+    "<div>" + k("handbrake") + " Handbrake / Drift</div><div>" + k("nitro") + " Nitro boost</div><div>" + k("shiftDown") + k("shiftUp") + " Gear \u2212 / +</div><div>" + k("reset") + ' Reset car</div><div><span class="key">F3</span> Debug overlay</div>' +
+    "<div>In air: " + k("left") + k("right") + " spin</div>" +
+    "<div>Drag mouse / right side of screen: look around</div>";
+}
+function applyControls() {
+  const mc = el("mobile-controls");
+  mc.style.setProperty("--ts", ctl.size); mc.style.setProperty("--to", ctl.opacity);
+  CONFIG.cameraLookSensitivity = BASE_LOOK * ctl.look;
+  el("size-slider").value = ctl.size; el("size-val").textContent = ctl.size.toFixed(2).replace(/0$/, "") + "x";
+  el("op-slider").value = ctl.opacity; el("op-val").textContent = Math.round(ctl.opacity * 100) + "%";
+  el("look-slider").value = ctl.look; el("look-val").textContent = ctl.look.toFixed(1) + "x";
+  for (const id of DRAG_IDS) { const p = pos[id] || { x: 0, y: 0 }; el(id).style.translate = p.x + "px " + p.y + "px"; }
+  rebuildKeyMap(); renderBindings(); renderHelp();
+}
+
+// Rebinding: the next key pressed is assigned (Esc cancels)
+window.addEventListener("keydown", e => {
+  if (!rebindAction) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (e.code !== "Escape" && e.code !== "F3") assignKey(rebindAction, e.code);
+  rebindAction = null; renderBindings(); renderHelp();
+}, true);
+
+// Tabs
+document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t === tab));
+  for (const name of ["general", "hud", "controls"]) el("tab-" + name).hidden = tab.dataset.tab !== name;
+  tab.blur();
+}));
+
+// Sliders
+const bindSlider = (id, key) => el(id).addEventListener("input", e => { ctl[key] = parseFloat(e.target.value); applyControls(); saveControls(); });
+bindSlider("size-slider", "size"); bindSlider("op-slider", "opacity"); bindSlider("look-slider", "look");
+
+// Drag-to-move touch buttons
+function setEdit(on) {
+  window.layoutEdit = on;
+  el("mobile-controls").classList.toggle("editing", on);
+  document.body.classList.toggle("hud-editing", on);
+  el("edit-done").style.display = on ? "block" : "none";
+  if (on) settingsPanel.classList.remove("open"); else saveControls();
+}
+el("edit-layout").addEventListener("click", () => setEdit(true));
+el("edit-hud").addEventListener("click", () => setEdit(true));
+el("edit-done").addEventListener("click", () => setEdit(false));
+for (const id of DRAG_IDS) {
+  const node = el(id); let drag = null;
+  node.addEventListener("pointerdown", e => {
+    if (!window.layoutEdit) return;
+    e.preventDefault(); e.stopPropagation();
+    const p = pos[id] || (pos[id] = { x: 0, y: 0 });
+    drag = { sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y, pid: e.pointerId };
+    try { node.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  node.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.pid) return;
+    pos[id].x = drag.ox + e.clientX - drag.sx; pos[id].y = drag.oy + e.clientY - drag.sy;
+    node.style.translate = pos[id].x + "px " + pos[id].y + "px";
+  });
+  const end = e => { if (drag && e.pointerId === drag.pid) { drag = null; saveControls(); } };
+  node.addEventListener("pointerup", end); node.addEventListener("pointercancel", end);
+}
+
+el("reset-controls").addEventListener("click", e => {
+  Object.assign(bindings, DEFAULT_BIND); Object.assign(ctl, { size: 1, opacity: 1, look: 1 });
+  for (const id of DRAG_IDS) delete pos[id];
+  resetHud();
+  applyControls(); applyHud(); saveControls(); e.currentTarget.blur();
+});
+
+// ---------- HUD customization: show/hide pieces, size, opacity, drag position ----------
+const HUD_CLASS = { gauge: "hide-gauge", gear: "hide-gear", drift: "hide-drift", nitro: "hide-nitro", help: "hide-help", status: "hide-status", reset: "hide-reset" };
+function applyHud() {
+  document.body.style.setProperty("--hs", hudCfg.scale);
+  document.body.style.setProperty("--ho", hudCfg.opacity);
+  for (const k in HUD_CLASS) document.body.classList.toggle(HUD_CLASS[k], !hudCfg.show[k]);
+  document.querySelectorAll("[data-hud]").forEach(b => {
+    const on = !!hudCfg.show[b.dataset.hud];
+    b.textContent = on ? "ON" : "OFF";
+    b.classList.toggle("on", on);
+  });
+  el("hs-slider").value = hudCfg.scale; el("hs-val").textContent = hudCfg.scale.toFixed(2).replace(/0$/, "") + "x";
+  el("ho-slider").value = hudCfg.opacity; el("ho-val").textContent = Math.round(hudCfg.opacity * 100) + "%";
+}
+function resetHud() {
+  hudCfg.show = { gauge: true, gear: true, drift: true, nitro: true, help: true, status: true, reset: true };
+  hudCfg.scale = 1; hudCfg.opacity = 1;
+  delete pos.hud;
+}
+document.querySelectorAll("[data-hud]").forEach(b => b.addEventListener("click", () => {
+  const k = b.dataset.hud;
+  hudCfg.show[k] = !hudCfg.show[k];
+  applyHud(); saveControls(); b.blur();
+}));
+el("hs-slider").addEventListener("input", e => { hudCfg.scale = parseFloat(e.target.value); applyHud(); saveControls(); });
+el("ho-slider").addEventListener("input", e => { hudCfg.opacity = parseFloat(e.target.value); applyHud(); saveControls(); });
+el("reset-hud").addEventListener("click", e => {
+  resetHud(); applyControls(); applyHud(); saveControls(); e.currentTarget.blur();
+});
+
+loadControls();
+applyControls();
+applyHud();
+
+// ============================================================
+// SOUND — Web Audio, synthesized live from the physics (no audio files needed yet).
+// Structure:  voices -> BUSES (engine / tires+terrain / effects) -> master -> compressor -> speakers
+//   PROFILES  one object per car id (idle, pitch range, response, turbo, exhaust, tires, terrain, suspension).
+//             To add a car: add `PROFILES.mycar = prof({ ... })` — any field you leave out uses PROFILE_DEFAULT.
+//   Settings  mute + master / engine / tires / effects sliders, saved in localStorage ("arcadeDriftSound").
+// Browsers only allow audio after a tap / key press, so sound starts on the first input.
+// ============================================================
+const sfx = (() => {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const S = { ctx: null, supported: !!AC, car: null, p: null, muted: false, vol: { master: 0.7, engine: 1, tires: 1, fx: 1 } };
+  const A = {};
+  const au = { rpm: 0.35, load: 0, boost: 0, nitro: 0, prevThr: 0, gear: 0, cut: 0, blip: 0, coast: 0, prevHB: false, prevNitro: false, swap: 0,
+    prevW: false, seqCool: 0, crackleT: 0, crackleMax: 1, popGap: 0, blowCool: 0, stompCool: 0 };
+
+  // ---- sound profiles ----
+  // Engine voice: cyl (pitch)  idle/red (rpm range)  harm (harmonic falloff: lower = brighter)  tone (filter brightness)  grit (distortion)
+  //   sub (half-order thump)  rasp (noise layer pulsing at the firing rate = raspy exhaust)  raspHz  detune (2nd oscillator = burble)
+  //   resMul/resQ/resGain (exhaust resonance that follows the revs)  rough (idle lope)  lug (extra roughness when labouring at low rpm)  gain
+  // Response:     rpmRise/rpmFall (1/s)  loadResp (how fast load follows the pedal)  revMatch (downshift blip, 0..1)  shiftCut (s)  shiftThump
+  // Turbo:        turbo (0 = none, 1 = full)  spool/spoolDown (1/s, lower = laggier)  whistleLo/Hi (Hz)  whistleGain  whoosh (air rush)  blowoff  flutter (compressor surge, 0..1)
+  // Exhaust:      pops (how readily it crackles)  popHz [lo, hi]  popSharp (sharp crack on top)  popDeep (thump pitch)  bang (loud bangs)  antiLag (rally-style, needs boost)
+  //               stomp (burst when the throttle is stamped)  shiftBlat (exhaust note after a shift)
+  // Other:        squealStart/squealGain  roadGain/windGain  suspGain
+  const PROFILE_DEFAULT = { cat: "road", cyl: 6, idle: 900, red: 7500, harm: 1.1, tone: 1, grit: 3, sub: 0.45, rasp: 0.2, raspHz: 2600, detune: 1.006,
+    resMul: 2, resQ: 1.5, resGain: 5, rough: 0.4, lug: 0.5, gain: 1, rpmRise: 10, rpmFall: 4.5, loadResp: 1, revMatch: 0.5, shiftCut: 0.12, shiftThump: 0.1,
+    turbo: 0, spool: 2.5, spoolDown: 6, whistleLo: 1500, whistleHi: 5700, whistleGain: 0.04, whoosh: 0.5, blowoff: 1, flutter: 0, antiLag: 0,
+    pops: 0.5, popHz: [250, 950], popSharp: 0.3, popDeep: 170, bang: 0.5, stomp: 0.3, shiftBlat: 0.4,
+    squealStart: 0.09, squealGain: 1, roadGain: 1, windGain: 1, suspGain: 1 };
+  const prof = o => Object.assign({}, PROFILE_DEFAULT, o);
+  const PROFILES = {
+    // SPORT: refined V12-style. Clean, smooth and bright, little rasp, quick precise revs, crisp rev-matched downshifts.
+    countach: prof({ cat: "sport", cyl: 12, idle: 1100, red: 8400, harm: 1.0, tone: 1.25, grit: 1.6, sub: 0.3, rasp: 0.05, raspHz: 3200, detune: 1.003,
+      resMul: 2, resQ: 1.2, resGain: 4, rough: 0.2, lug: 0.2, gain: 0.9, rpmRise: 11, rpmFall: 5, loadResp: 1.1, revMatch: 0.85, shiftCut: 0.09, shiftThump: 0.08,
+      turbo: 0.5, spool: 3.2, spoolDown: 7, whistleLo: 3200, whistleHi: 6500, whistleGain: 0.07, whoosh: 0.35, blowoff: 0.55,   // subtle, smooth, high-pitched
+      pops: 0.5, popHz: [180, 520], popSharp: 0.1, popDeep: 150, bang: 0.3, stomp: 0.35, shiftBlat: 0.5,                                // soft, rounded pops
+      squealGain: 0.9, roadGain: 0.8, suspGain: 0.7 }),
+    // RALLY: raspy turbo four. Rough idle, strong midrange growl, sharp raspy top end, fast aggressive shifts.
+    rally: prof({ cat: "rally", cyl: 4, idle: 950, red: 7200, harm: 0.85, tone: 1.0, grit: 3.8, sub: 0.35, rasp: 0.6, raspHz: 2400, detune: 1.012,
+      resMul: 3, resQ: 2.5, resGain: 6, rough: 0.7, lug: 0.6, gain: 1.0, rpmRise: 12, rpmFall: 5.5, loadResp: 1.2, revMatch: 0.6, shiftCut: 0.08, shiftThump: 0.12,
+      turbo: 1, spool: 1.8, spoolDown: 5, whistleLo: 1700, whistleHi: 5200, whistleGain: 0.05, whoosh: 0.6, blowoff: 1, flutter: 0.15, antiLag: 1,   // laggy, progressive spool; anti-lag
+      pops: 1.0, popHz: [500, 1900], popSharp: 0.8, popDeep: 200, bang: 1.0, stomp: 0.5, shiftBlat: 1.0,                                       // sharp pops, loud bangs, hard shift notes
+      squealGain: 1.0, roadGain: 1.1, suspGain: 1.0 }),
+    // BUGGY: light, tinny, very high-revving.
+    buggy: prof({ cat: "offroad", cyl: 4, idle: 1700, red: 8800, harm: 0.8, tone: 1.35, grit: 3.5, sub: 0.15, rasp: 0.4, raspHz: 3000, detune: 1.015,
+      resMul: 4, resQ: 3, resGain: 5, rough: 0.5, lug: 0.4, gain: 1.0, rpmRise: 13, rpmFall: 6, revMatch: 0.4, shiftCut: 0.08,
+      pops: 0.6, popHz: [350, 1400], popSharp: 0.5, popDeep: 220, bang: 0.5, stomp: 0.3, shiftBlat: 0.4,
+      roadGain: 1.1, suspGain: 1.1 }),
+    // DRIFT: raspy, screaming inline-six. Very quick revs, throttle-responsive load, always blips on downshifts.
+    drift: prof({ cat: "drift", cyl: 6, idle: 850, red: 8200, harm: 0.9, tone: 1.15, grit: 3.3, sub: 0.3, rasp: 0.5, raspHz: 2800, detune: 1.009,
+      resMul: 3, resQ: 2, resGain: 6, rough: 0.4, lug: 0.3, gain: 1.0, rpmRise: 14, rpmFall: 7, loadResp: 1.5, revMatch: 0.9, shiftCut: 0.07,
+      turbo: 1, spool: 2.4, spoolDown: 6, whistleLo: 2200, whistleHi: 6200, whistleGain: 0.045, whoosh: 0.45, blowoff: 1, flutter: 0.6, antiLag: 0.25,   // quick spool, compressor flutter
+      pops: 1.0, popHz: [700, 2400], popSharp: 1.0, popDeep: 190, bang: 0.5, stomp: 0.85, shiftBlat: 0.8,                                       // raspy crackles, strong bursts
+      squealStart: 0.07, squealGain: 1.15, roadGain: 0.9, suspGain: 0.8 }),
+    // DAKAR: heavy V8 truck. Dark and low, strong sub-rumble, deep exhaust boom that follows the revs, lumpy and rough when labouring, slow heavy shifts.
+    dakar: prof({ cat: "truck", cyl: 8, idle: 650, red: 5600, harm: 1.35, tone: 0.7, grit: 2.2, sub: 0.9, rasp: 0.2, raspHz: 1500, detune: 1.004,
+      resMul: 1, resQ: 1.6, resGain: 9, rough: 0.85, lug: 1.0, gain: 1.15, rpmRise: 7, rpmFall: 3.2, loadResp: 0.6, revMatch: 0.25, shiftCut: 0.2, shiftThump: 0.2,
+      pops: 0.4, popHz: [90, 420], popSharp: 0.25, popDeep: 85, bang: 0.9, stomp: 1.0, shiftBlat: 0.7,                                         // naturally aspirated: deep thumps, big exhaust bursts
+      squealGain: 0.7, roadGain: 1.3, suspGain: 1.6 })
+  };
+
+  // ---- settings (saved) ----
+  try {
+    const s = JSON.parse(localStorage.getItem("arcadeDriftSound") || "null");
+    if (s) {
+      S.muted = s.muted === true || s.on === false;                       // "on" is the older save format
+      const v = typeof s.vol === "object" && s.vol ? s.vol : { master: s.vol };
+      for (const k in S.vol) if (typeof v[k] === "number") S.vol[k] = clamp(v[k], 0, 1);
+    }
+  } catch (_) {}
+  const save = () => { try { localStorage.setItem("arcadeDriftSound", JSON.stringify({ muted: S.muted, vol: S.vol })); } catch (_) {} };
+
+  const curve = k => { const n = 1024, c = new Float32Array(n), th = Math.tanh(k); for (let i = 0; i < n; i++) { const x = i * 2 / n - 1; c[i] = Math.tanh(k * x) / th; } return c; };
+  const makeWave = p => {   // exhaust-pulse spectrum: harmonics fall off as 1/n^p, even orders slightly stronger
+    const N = 32, re = new Float32Array(N), im = new Float32Array(N);
+    for (let n = 1; n < N; n++) im[n] = Math.pow(n, -p) * (n % 2 === 0 ? 1.15 : 1);
+    return S.ctx.createPeriodicWave(re, im);
+  };
+  const live = () => S.ctx && !S.muted && S.ctx.state === "running";
+  let shots = 0; const MAX_SHOTS = 14;   // cap on simultaneous one-shot sounds (keeps low-end phones smooth)
+
+  // ---- voice helpers (every sound goes through a bus) ----
+  function noiseLoop(type, freq, q, bus) {
+    const ctx = S.ctx, src = ctx.createBufferSource();
+    src.buffer = A.buf; src.loop = true; src.start(0, Math.random() * 2);
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.value = 0;
+    src.connect(f); f.connect(g); g.connect(bus);
+    return { f, g };
+  }
+  function toneLoop(type, freq, filterFreq, q, bus) {
+    const ctx = S.ctx, o = ctx.createOscillator(); o.type = type; o.frequency.value = freq; o.start();
+    const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = filterFreq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.value = 0;
+    o.connect(f); f.connect(g); g.connect(bus);
+    return { o, f, g };
+  }
+  function burst(type, freq, q, dur, gain, delay = 0, bus = A.fx) {
+    if (!live() || shots >= MAX_SHOTS) return;
+    const ctx = S.ctx, t = ctx.currentTime + delay;
+    const src = ctx.createBufferSource(); src.buffer = A.buf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gain, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(bus);
+    src.start(t, Math.random() * 2, dur + 0.05);
+    shots++; src.onended = () => { shots--; g.disconnect(); };
+  }
+  function thump(f0, f1, dur, gain, delay = 0, type = "sine", bus = A.fx) {
+    if (!live() || shots >= MAX_SHOTS) return;
+    const ctx = S.ctx, t = ctx.currentTime + delay;
+    const o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gain, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(bus);
+    o.start(t); o.stop(t + dur + 0.05);
+    shots++; o.onended = () => { shots--; g.disconnect(); };
+  }
+  // One exhaust crackle in this car's character: pitch range, sharp top crack and thump depth all come from the profile, and vary every time
+  function pop(amt = 1) {
+    const p = S.p || PROFILE_DEFAULT, lvl = amt * (0.6 + 0.6 * Math.random());
+    burst("bandpass", p.popHz[0] + Math.random() * (p.popHz[1] - p.popHz[0]), 1.4, 0.05 + Math.random() * 0.06, 0.4 * lvl);
+    if (Math.random() < p.popSharp) burst("highpass", 2800, 0.7, 0.025, 0.14 * lvl * p.popSharp);
+    thump(p.popDeep * (0.9 + 0.3 * Math.random()), 45, 0.07, 0.22 * lvl);
+  }
+  function bang(amt = 1) {                                               // a rarer, louder bang
+    const p = S.p || PROFILE_DEFAULT, lvl = amt * p.bang;
+    thump(p.popDeep * 0.7, 38, 0.16, 0.5 * lvl); burst("lowpass", 900, 0.8, 0.14, 0.55 * lvl); burst("bandpass", 1800, 1.0, 0.05, 0.3 * lvl * (0.4 + 0.6 * p.popSharp));
+  }
+  function blowoff(amt = 1) {                                            // turbo pressure release: louder and longer at higher boost
+    const p = S.p || PROFILE_DEFAULT, k = amt * p.blowoff;
+    burst("highpass", 3000 + 1200 * amt, 0.7, 0.25 + 0.25 * amt, 0.15 * k); burst("bandpass", 1800, 1.0, 0.3, 0.08 * k);
+  }
+  function turboRelease(amt) { if (au.blowCool > 0) return; blowoff(amt); au.blowCool = 0.7; }
+  function flutter(amt) { for (let i = 0; i < 4; i++) burst("bandpass", 2400 - i * 150, 6, 0.05, 0.11 * amt * (1 - i * 0.2), i * 0.055); }   // compressor surge "tu-tu-tu"
+  function ratchet(release) {
+    const n = release ? 1 : 4;
+    for (let i = 0; i < n; i++) burst("bandpass", 2300 + i * 160, 8, 0.02, 0.22, i * 0.035);
+    thump(150, 90, 0.05, release ? 0.06 : 0.12);
+  }
+  function land(impact) {
+    if (!live()) return;
+    const w = (S.p || PROFILE_DEFAULT).suspGain, v = clamp(impact / 14, 0.08, 1) * w;
+    thump(120 / Math.sqrt(Math.max(w, 0.7)), 34, 0.45, 0.55 * v); burst("lowpass", 700, 0.7, 0.3, 0.5 * v);
+    if (impact > 5) { burst("bandpass", 2600, 1.2, 0.18, 0.12 * v); thump(70, 40, 0.25, 0.3 * v, 0.06, "triangle"); }
+  }
+  function bump(speedAbs) {
+    if (!live()) return;
+    const k = clamp(speedAbs / 20, 0.15, 1) * (S.p || PROFILE_DEFAULT).suspGain;
+    thump(180, 60, 0.18, 0.4 * k, 0, "triangle"); burst("bandpass", 900, 1.5, 0.15, 0.35 * k); burst("bandpass", 3200, 3, 0.06, 0.15 * k);
+  }
+
+  // ---- graph ----
+  function applyVolumes() {
+    if (!A.master) return;
+    const t = S.ctx.currentTime;
+    A.master.gain.setTargetAtTime(S.muted ? 0 : S.vol.master, t, 0.03);
+    A.engBus.gain.setTargetAtTime(S.vol.engine, t, 0.03);
+    A.tireBus.gain.setTargetAtTime(S.vol.tires, t, 0.03);
+    A.fx.gain.setTargetAtTime(S.vol.fx, t, 0.03);
+  }
+  function build() {
+    const ctx = S.ctx = new AC({ latencyHint: "interactive" });
+    const master = A.master = ctx.createGain(); master.gain.value = S.muted ? 0 : S.vol.master;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.knee.value = 12; comp.ratio.value = 5; comp.attack.value = 0.004; comp.release.value = 0.2;
+    master.connect(comp); comp.connect(ctx.destination);
+    A.engBus = ctx.createGain(); A.tireBus = ctx.createGain(); A.fx = ctx.createGain();
+    A.engBus.gain.value = S.vol.engine; A.tireBus.gain.value = S.vol.tires; A.fx.gain.value = S.vol.fx;
+    A.engBus.connect(master); A.tireBus.connect(master); A.fx.connect(master);
+
+    const len = ctx.sampleRate * 3, buf = A.buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+    // engine: two exhaust-pulse oscillators (slightly detuned) + a half-order sub -> distortion -> low-pass -> gain -> duck -> engine bus
+    const eng = A.eng = ctx.createGain(); eng.gain.value = 0;
+    A.duck = ctx.createGain(); A.duck.gain.value = 1;                 // dips briefly while one car's sound swaps for another's
+    const shaper = A.shaper = ctx.createWaveShaper(); shaper.oversample = "2x";
+    const lp = A.lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 1.1; lp.frequency.value = 800;
+    const res = A.res = ctx.createBiquadFilter(); res.type = "peaking"; res.Q.value = 1.5; res.gain.value = 5; res.frequency.value = 200;   // exhaust resonance
+    const hp = A.hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 40; hp.Q.value = 0.7;   // keeps sub-bass out of small phone speakers
+    A.o1 = ctx.createOscillator(); A.o2 = ctx.createOscillator(); A.o3 = ctx.createOscillator(); A.o3.type = "triangle";
+    const mix = (o, level) => { const g = ctx.createGain(); g.gain.value = level; o.connect(g); g.connect(shaper); o.start(); return g; };
+    mix(A.o1, 0.5); mix(A.o2, 0.3); A.g3 = mix(A.o3, 0.45);
+    shaper.connect(lp); lp.connect(res); res.connect(hp); hp.connect(eng); eng.connect(A.duck); A.duck.connect(A.engBus);
+    // rasp: band-passed noise whose level pulses at the firing rate (amplitude-modulated), added after the filters so the top end stays raspy
+    const rsrc = ctx.createBufferSource(); rsrc.buffer = A.buf; rsrc.loop = true; rsrc.start(0, Math.random() * 2);
+    A.raspF = ctx.createBiquadFilter(); A.raspF.type = "bandpass"; A.raspF.frequency.value = 2600; A.raspF.Q.value = 0.9;
+    A.raspG = ctx.createGain(); A.raspG.gain.value = 0; A.raspO = ctx.createOscillator(); A.raspD = ctx.createGain(); A.raspD.gain.value = 0;
+    rsrc.connect(A.raspF); A.raspF.connect(A.raspG); A.raspG.connect(eng);
+    A.raspO.connect(A.raspD); A.raspD.connect(A.raspG.gain); A.raspO.start();
+    A.lfo = ctx.createOscillator(); A.lfo.frequency.value = 6; A.lfoD = ctx.createGain(); A.lfoD.gain.value = 0;   // idle lope
+    A.lfo.connect(A.lfoD); A.lfoD.connect(eng.gain); A.lfo.start();
+
+    A.intake = noiseLoop("bandpass", 900, 0.8, A.engBus);
+    A.road = noiseLoop("lowpass", 300, 0.7, A.tireBus);
+    A.wind = noiseLoop("bandpass", 600, 0.4, A.tireBus);
+    A.sqN = noiseLoop("bandpass", 1700, 7, A.tireBus);
+    A.sqO = toneLoop("sawtooth", 1200, 1500, 12, A.tireBus);
+    A.nitro = noiseLoop("bandpass", 2600, 0.8, A.fx);
+    A.whistle = toneLoop("sine", 2000, 2000, 0.8, A.fx);
+    A.whoosh = noiseLoop("bandpass", 1200, 0.9, A.fx);          // turbo air rush
+    A.whine = toneLoop("sawtooth", 300, 600, 3, A.fx);
+    setEngine(currentCar);
+  }
+  function setEngine(id) {
+    const p = PROFILES[id] || PROFILES.countach;
+    S.car = id; S.p = p;
+    const w = makeWave(p.harm);
+    A.o1.setPeriodicWave(w); A.o2.setPeriodicWave(w);
+    A.shaper.curve = curve(p.grit);
+    A.res.Q.value = p.resQ; A.res.gain.value = p.resGain; A.raspF.frequency.value = p.raspHz;
+    au.rpm = Math.max(au.rpm, 0.3); au.boost = 0; au.load = 0; au.coast = 0; au.blip = 0;
+  }
+
+  // ---- per-frame update ----
+  function update(dt) {
+    if (!live()) return;
+    const ctx = S.ctx, t = ctx.currentTime;
+    // car switched: dip the engine, swap the profile at the bottom of the dip, bring it back up
+    if (S.car !== currentCar && au.swap === 0) { au.swap = 0.16; A.duck.gain.setTargetAtTime(0, t, 0.04); }
+    if (au.swap > 0) { au.swap -= dt; if (au.swap <= 0) { au.swap = 0; setEngine(currentCar); A.duck.gain.setTargetAtTime(1, t, 0.08); } }
+    const p = S.p;
+    const set = (prm, v, tc = 0.05) => prm.setTargetAtTime(v, t, tc);
+    const speed = state.speed, air = state.air, thr = clamp(state.thr, 0, 1);
+    au.blip = Math.max(0, au.blip - dt);
+    const climb = thr > 0.1 ? clamp(state.slope * 4, 0, 0.45) : 0;                     // uphill: the engine works harder
+    au.load = damp(au.load, thr, 14 * p.loadResp, dt);
+    const load = clamp(Math.max(au.load, au.blip > 0 ? 0.8 * p.revMatch : 0) + climb, 0, 1);
+
+    // RPM: gearbox readout, plus free-revving at a standstill (clutch slip) and in the air
+    let target = clamp(trans.rpm, 0, 1.05);
+    target = Math.max(target, thr * 0.6 * (1 - smoothstep01(speed / 7)));
+    if (air) target = Math.max(target, thr * 0.95);
+    if (state.nitroOn) target = Math.min(1.05, target + 0.04);
+    const rise = p.rpmRise * (au.blip > 0 ? 1.8 : 1), fall = p.rpmFall * (au.cut > 0 ? 3 : 1);   // revs snap up on a downshift blip, drop fast during an upshift cut
+    au.rpm = damp(au.rpm, target, target > au.rpm ? rise : fall, dt);
+    const rpmN = clamp(au.rpm, 0, 1.08), rpmC = Math.min(rpmN, 1);
+    const wander = (0.012 * Math.sin(t * 3.1) + 0.008 * Math.sin(t * 7.7 + 1)) * (1 - rpmC) * (1 - rpmC);   // a living, slightly unsteady idle
+    const rpmReal = p.idle + (p.red - p.idle) * (rpmN + wander);
+    const f = rpmReal / 60 * p.cyl / 2;                       // firing frequency
+
+    // gear changes: clunk, brief torque cut on upshifts, turbo blow-off
+    if (trans.gear !== au.gear) {
+      if (au.gear && Math.abs(trans.gear - au.gear) === 1 && !air) {
+        thump(95, 55, 0.09, p.shiftThump);
+        if (trans.gear > au.gear) {
+          au.cut = p.shiftCut;
+          if (thr > 0.5) {                                               // aggressive shift: exhaust note as the power comes back, sometimes a pop or bang
+            burst("lowpass", 700, 0.8, 0.12, 0.28 * p.shiftBlat, p.shiftCut); thump(p.popDeep * 0.8, 50, 0.1, 0.2 * p.shiftBlat, p.shiftCut);
+            if (Math.random() < 0.3 + 0.5 * p.pops) pop(0.9);
+            if (Math.random() < 0.18 * p.antiLag + 0.08 * p.bang * p.pops) bang(0.8);
+          }
+          if (p.turbo && au.boost > 0.3) turboRelease(0.6 * au.boost);
+        } else if (p.revMatch > 0.2) {                                   // downshift: the engine blips to match the lower gear
+          au.blip = 0.22;
+          if (Math.random() < 0.6 * p.pops) pop(0.5 * p.revMatch);
+        }
+      }
+      au.gear = trans.gear;
+    }
+    au.cut = Math.max(0, au.cut - dt);
+
+    // nitro
+    au.nitro = damp(au.nitro, state.nitroOn ? 1 : 0, 7, dt);
+    if (state.nitroOn && !au.prevNitro) { burst("highpass", 2500, 0.7, 0.5, 0.35); bang(0.8); thump(90, 45, 0.25, 0.25); }
+    au.prevNitro = !!state.nitroOn;
+    const nit = au.nitro;
+
+    // engine braking (lifting off at speed, stronger downhill) and labouring (high load at low revs)
+    let coastT = (thr < 0.1 && state.vx > 0.8 && !air) ? clamp(rpmC * 1.4, 0, 1) : 0;
+    coastT = clamp(coastT * (1 + Math.max(0, -state.slope) * 5), 0, 1.3);
+    au.coast = damp(au.coast, coastT, 6, dt);
+    const coast = au.coast, lug = load * (1 - smoothstep01(rpmC / 0.5));
+
+    // engine body
+    const limiter = trans.manual && trans.rpm >= 0.995 && thr > 0.4;
+    const base = 0.2 * p.gain * (0.5 + 0.5 * load) * (0.65 + 0.35 * rpmC) * (1 + 0.35 * nit) * (1 - 0.35 * coast) * (au.cut > 0 ? 0.35 : 1) * (limiter ? (Math.sin(t * 90) > 0 ? 1 : 0.2) : 1);
+    set(A.eng.gain, base, limiter ? 0.004 : 0.04);
+    set(A.o1.frequency, f, 0.02); set(A.o2.frequency, f * p.detune, 0.02); set(A.o3.frequency, f * 0.5, 0.02);
+    set(A.g3.gain, p.sub * (1 + 0.6 * coast) * smoothstep01((f * 0.5 - 22) / 26), 0.08);   // sub fades out when it would drop below what speakers can play
+    set(A.res.frequency, clamp(f * p.resMul, 70, 2500), 0.04);
+    set(A.lp.frequency, (450 + 5200 * Math.pow(rpmC, 1.1) * p.tone) * (0.4 + 0.6 * load + 0.2 * nit) * (1 - 0.3 * coast));
+    set(A.lfo.frequency, rpmReal / 120, 0.1);
+    set(A.lfoD.gain, base * p.rough * (0.55 * Math.pow(1 - rpmC, 2.5) + 0.4 * p.lug * lug), 0.1);
+    const raspL = 0.25 * p.rasp * (0.3 + 0.7 * rpmC) * (0.4 + 0.6 * load);
+    set(A.raspG.gain, raspL, 0.04); set(A.raspD.gain, raspL, 0.04); set(A.raspO.frequency, f, 0.02);
+    set(A.intake.g.gain, (0.012 + 0.05 * load * Math.pow(rpmC, 1.5)) * p.gain);
+    set(A.intake.f.frequency, 500 + 1500 * rpmC);
+
+    // ---- throttle edges (from the pedal itself, so they are crisp) ----
+    const wDown = !!keys.KeyW;
+    const lifted = au.prevW && !wDown, stamped = wDown && !au.prevW;
+    au.blowCool = Math.max(0, au.blowCool - dt); au.seqCool = Math.max(0, au.seqCool - dt);
+    au.stompCool = Math.max(0, au.stompCool - dt); au.popGap = Math.max(0, au.popGap - dt);
+
+    // ---- turbo: spool lags behind load and revs, so it builds progressively; lifting off releases the pressure ----
+    const boostT = p.turbo ? thr * smoothstep01((rpmC - 0.15) / 0.45) * (0.5 + 0.5 * rpmC) : 0;
+    au.boost = damp(au.boost, boostT, boostT > au.boost ? p.spool : p.spoolDown, dt);
+    if (p.turbo && lifted && au.boost > 0.4) {
+      turboRelease(au.boost * p.turbo);
+      if (p.flutter > 0 && au.boost > 0.6 && Math.random() < p.flutter) flutter(au.boost);
+    }
+    const bE = au.boost * p.turbo;                                       // effective boost
+    const wv = Math.max(bE, nit * rpmC), wHz = p.whistleLo + (p.whistleHi - p.whistleLo) * wv;
+    set(A.whistle.o.frequency, wHz, 0.05); set(A.whistle.f.frequency, wHz, 0.05);
+    set(A.whistle.g.gain, p.whistleGain * Math.pow(bE, 1.5) + 0.05 * nit);   // quiet at low boost, singing at high boost
+    set(A.whoosh.g.gain, 0.12 * p.whoosh * bE * bE);
+    set(A.whoosh.f.frequency, 900 + 2600 * bE);
+    set(A.nitro.g.gain, 0.22 * nit);
+    set(A.nitro.f.frequency, 1800 + 2500 * nit);
+
+    // ---- exhaust ----
+    // Crackle: only after lifting off from real load, as a short burble that dies away, then a cool-down. Anti-lag cars crackle harder and bang when boost is up.
+    if (lifted && rpmC > 0.55 && speed > 8 && au.seqCool <= 0 && au.prevThr > 0.6 && Math.random() < 0.25 + 0.65 * p.pops) {   // only after real load, and not every time
+      au.crackleT = au.crackleMax = (0.3 + 0.6 * Math.random()) * (0.5 + 0.5 * p.pops) * (0.6 + 0.6 * au.boost);
+      au.seqCool = 1.6 + 1.5 * Math.random();
+    }
+    if (au.crackleT > 0) {
+      au.crackleT -= dt;
+      if (wDown) au.crackleT = 0;                                        // pedal back on ends it
+      else if (au.popGap <= 0 && Math.random() < dt * (10 + 14 * p.antiLag * au.boost) * (au.crackleT / au.crackleMax + 0.2)) {
+        pop(0.8 + 0.4 * Math.random());
+        if (Math.random() < 0.12 + 0.3 * p.antiLag * au.boost) bang(0.9);
+        au.popGap = 0.045;
+      }
+    }
+    // Stamping the throttle: a deep burst from the exhaust (biggest on the truck)
+    if (stamped && rpmC < 0.8 && au.stompCool <= 0 && !air) {
+      thump(p.popDeep * 0.8, 40, 0.22, 0.32 * p.stomp); burst("lowpass", 500, 0.8, 0.22, 0.3 * p.stomp);
+      au.stompCool = 0.8;
+    }
+    au.prevW = wDown; au.prevThr = thr;
+
+    // tire squeal: rear / front slip, handbrake slide, wheelspin burnout, hard braking
+    const rs = Math.abs(state.rearSlip), fs = Math.abs(state.frontSlip);
+    let sq = clamp((Math.max(rs, fs * 0.9) - p.squealStart) / 0.22, 0, 1);
+    if (state.handbrake && drift.engaged > 0.3) sq = Math.max(sq, drift.engaged * 0.8);
+    sq = Math.max(sq, clamp((state.rearSat - 0.85) / 0.4, 0, 1) * thr * (speed < 25 ? 0.7 : 0));
+    sq *= clamp((speed - 3) / 8, 0, 1) * (air ? 0 : 1);
+    if (keys.KeyS && state.vx > 12 && !air) sq = Math.max(sq, 0.25);
+    sq *= p.squealGain;
+    set(A.sqN.g.gain, 0.2 * sq, 0.03);
+    set(A.sqN.f.frequency, 1700 + speed * 12 + 300 * sq);
+    set(A.sqO.g.gain, 0.045 * sq, 0.03);
+    set(A.sqO.o.frequency, 1100 + speed * 9 + 500 * sq + 70 * Math.sin(t * 17) + 40 * Math.sin(t * 31), 0.02);
+
+    // road roar, wind, reverse gear whine
+    set(A.road.g.gain, air ? 0 : 0.3 * p.roadGain * Math.pow(clamp(speed / 45, 0, 1), 0.8));
+    set(A.road.f.frequency, 220 + speed * 14);
+    set(A.wind.g.gain, 0.4 * p.windGain * Math.pow(clamp(speed / 65, 0, 1), 2));
+    set(A.wind.f.frequency, 350 + speed * 18);
+    const rev = state.vx < -1 && !air ? clamp(-state.vx / 10, 0, 1) : 0;
+    set(A.whine.g.gain, 0.035 * rev);
+    set(A.whine.o.frequency, 280 + Math.max(0, -state.vx) * 38, 0.05);
+    set(A.whine.f.frequency, 280 + Math.max(0, -state.vx) * 38, 0.05);
+
+    // handbrake ratchet
+    const hb = !!keys.Space;
+    if (hb !== au.prevHB) ratchet(!hb);
+    au.prevHB = hb;
+  }
+
+  // ---- control ----
+  function start() {
+    if (!AC) return;
+    try {
+      if (!S.ctx) build();
+      if (S.ctx.state === "suspended" && !S.muted && !document.hidden) S.ctx.resume();
+    } catch (e) { S.supported = false; }
+  }
+  function setVolume(bus, v) { S.vol[bus] = clamp(v, 0, 1); applyVolumes(); save(); }
+  function setMuted(m) {
+    S.muted = !!m; applyVolumes(); save();
+    if (!S.muted) start();
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!S.ctx) return;
+    if (document.hidden) S.ctx.suspend(); else if (!S.muted) S.ctx.resume();
+  });
+  ["pointerdown", "keydown", "touchstart"].forEach(ev => window.addEventListener(ev, start, { passive: true }));
+
+  return Object.assign(S, { PROFILES, prof, update, land, bump, start, setVolume, setMuted });
+})();
+
+// Settings > General: mute button + four volume sliders (touch friendly)
+{
+  const btn = el("snd-toggle");
+  const sliders = document.querySelectorAll("[data-vol]");
+  const sync = () => {
+    btn.textContent = !sfx.supported ? "N/A" : sfx.muted ? "OFF" : "ON";
+    btn.classList.toggle("on", sfx.supported && !sfx.muted);
+    sliders.forEach(s => { const v = sfx.vol[s.dataset.vol]; s.value = v; el("v-" + s.dataset.vol).textContent = Math.round(v * 100) + "%"; });
+  };
+  btn.addEventListener("click", () => { sfx.setMuted(!sfx.muted); sync(); btn.blur(); });
+  sliders.forEach(s => s.addEventListener("input", e => { sfx.setVolume(s.dataset.vol, parseFloat(e.target.value)); sync(); }));
+  window.addEventListener("keydown", e => { if (e.code === "KeyM" && !e.repeat && !rebindAction) { sfx.setMuted(!sfx.muted); sync(); } });
+  sync();
+}
+
+// ---------- Main loop: fixed physics steps, variable-rate rendering ----------
+let lastTime = performance.now(), accumulator = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - lastTime) / 1000, 0.1);
+  lastTime = now;
+  accumulator += dt;
+  let steps = 0;
+  while (accumulator >= FIXED_DT && steps < CONFIG.maxPhysicsStepsPerFrame) {
+    updatePhysics(FIXED_DT); accumulator -= FIXED_DT; steps++;
+  }
+  if (steps >= CONFIG.maxPhysicsStepsPerFrame) accumulator = 0;
+  updateVisuals(dt); updateCamera(dt); updateHud(); sfx.update(dt);
+  renderer.render(scene, camera);
+}
+resetCar();
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>
