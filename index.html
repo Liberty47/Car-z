@@ -213,7 +213,7 @@ body:not(.manual-trans) #gear-controls .touch-btn { opacity: calc(var(--to, 1) *
     <div class="tabs"><button class="tab on" data-tab="general">GENERAL</button><button class="tab" data-tab="hud">HUD</button><button class="tab" data-tab="controls">CONTROLS</button></div>
     <div id="tab-general">
       <div class="set-title">CAR</div>
-      <div class="set-row" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><button class="toggle wide" data-car="countach">Sport</button><button class="toggle wide" data-car="rally">Rally</button><button class="toggle wide" data-car="buggy">Buggy</button><button class="toggle wide" data-car="drift">Drift</button><button class="toggle wide" data-car="dakar">Dakar Truck</button></div>
+      <div class="set-row" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><button class="toggle wide" data-car="countach">Sport</button><button class="toggle wide" data-car="rally">Rally</button><button class="toggle wide" data-car="buggy">Buggy</button><button class="toggle wide" data-car="drift">Drift</button><button class="toggle wide" data-car="dakar">Dakar Truck</button><button class="toggle wide" data-car="muscle">Muscle</button><button class="toggle wide" data-car="hatch">Hatch</button><button class="toggle wide" data-car="ev">EV</button><button class="toggle wide" data-car="suv">SUV</button></div>
       <div class="set-row"><span>Fullscreen</span><button id="fs-toggle" class="toggle">OFF</button></div>
       <div id="fs-note"></div>
       <div class="set-row"><span>Drift assist</span><button id="assist-toggle" class="toggle on">ON</button></div>
@@ -618,6 +618,74 @@ const PHYSICS = {
     gearSpeeds: [0, 10, 19, 28, 37, 45],
     kineticGrip: 0.66, slideEnterSlip: 0.1, slideExitSlip: 0.05, slidePowerRatio: 0.9, kineticRise: 16, kineticFall: 3,
     driftThrottleGain: 0.22, flickKick: 4.2, flickGripDrop: 0.35, flickDuration: 0.5, throttleRise: 0.1
+  }),
+  // MUSCLE: heavy RWD coupe. Big torque, low rear grip, strong power-oversteer, slow steering, long gearing.
+  muscle: phys({
+    mass: 1600, yawInertia: 2600, wheelbase: 2.75, cgToFrontAxle: 1.4, cgToRearAxle: 1.35, cgHeight: 0.5,
+    frontStaticLoadFraction: 0.55, rearStaticLoadFraction: 0.45,
+    frontTireB: 9.0, frontTireC: 1.3, frontTireD: 1.0, frontTireE: 0.97,
+    rearTireB: 7.5, rearTireC: 1.3, rearTireD: 1.0, rearTireE: 0.97,
+    frontGrip: 1.0, rearGrip: 0.9, handbrakeRearGrip: 0.28, rearSlipSmokeThreshold: 0.2, rearSlipMarkThreshold: 0.16,
+    engineForce: 9500, drivetrainEfficiency: 0.88, brakeForce: 14000, frontBrakeBias: 0.62,
+    rollingResistance: 160, aeroDragCoefficient: 0.4, frontalArea: 2.2, maxForwardSpeed: 68, maxReverseSpeed: 11,
+    maxSteeringAngleLowSpeed: 0.5, maxSteeringAngleHighSpeed: 0.1, steeringFadeSpeed: 30, steeringResponse: 6,
+    countersteerAssistStrength: 0.9, countersteerStartSlip: 0.12,
+    yawDamping: 350, driveFrontShare: 0,
+    rollGain: 0.007, rollMax: 0.12, pitchGain: 0.004, pitchMax: 0.06,
+    gearSpeeds: [0, 13, 24, 35, 46, 57],
+    kineticGrip: 0.6, slideEnterSlip: 0.1, slideExitSlip: 0.05, slidePowerRatio: 0.85, kineticRise: 12, kineticFall: 4,
+    driftThrottleGain: 0.35, flickKick: 3.0, flickGripDrop: 0.3, flickDuration: 0.55, throttleRise: 0.2
+  }),
+  // HATCH: light FWD hot hatch. Quick steering, understeer bias, strong braking, agile.
+  hatch: phys({
+    mass: 1100, yawInertia: 1500, wheelbase: 2.5, cgToFrontAxle: 1.15, cgToRearAxle: 1.35, cgHeight: 0.5,
+    frontStaticLoadFraction: 0.6, rearStaticLoadFraction: 0.4,
+    frontTireB: 9.5, frontTireC: 1.3, frontTireD: 1.0, frontTireE: 0.95,
+    rearTireB: 9.0, rearTireC: 1.3, rearTireD: 1.0, rearTireE: 0.95,
+    frontGrip: 1.05, rearGrip: 1.15, handbrakeRearGrip: 0.24, rearSlipSmokeThreshold: 0.2, rearSlipMarkThreshold: 0.16,
+    engineForce: 7000, drivetrainEfficiency: 0.9, brakeForce: 12000, frontBrakeBias: 0.72,
+    rollingResistance: 170, aeroDragCoefficient: 0.38, frontalArea: 2.0, maxForwardSpeed: 60, maxReverseSpeed: 12,
+    maxSteeringAngleLowSpeed: 0.62, maxSteeringAngleHighSpeed: 0.16, steeringFadeSpeed: 32, steeringResponse: 10,
+    countersteerAssistStrength: 0.6, countersteerStartSlip: 0.16,
+    yawDamping: 320, driveFrontShare: 1.0,
+    rollGain: 0.008, rollMax: 0.1, pitchGain: 0.005, pitchMax: 0.08,
+    gearSpeeds: [0, 11, 20, 30, 40, 49],
+    kineticGrip: 0.7, slideEnterSlip: 0.14, slideExitSlip: 0.07, slidePowerRatio: 0.95, kineticRise: 12, kineticFall: 5,
+    driftThrottleGain: 0.12, flickKick: 2.6, flickGripDrop: 0.2, flickDuration: 0.5, throttleRise: 0.15
+  }),
+  // EV: heavy AWD electric. Instant torque, neutral handling, high grip, no gear shifts feel.
+  ev: phys({
+    mass: 1900, yawInertia: 2800, wheelbase: 2.8, cgToFrontAxle: 1.4, cgToRearAxle: 1.4, cgHeight: 0.45,
+    frontStaticLoadFraction: 0.5, rearStaticLoadFraction: 0.5,
+    frontTireB: 10, frontTireC: 1.3, frontTireD: 1.0, frontTireE: 0.97,
+    rearTireB: 10, rearTireC: 1.3, rearTireD: 1.0, rearTireE: 0.97,
+    frontGrip: 1.2, rearGrip: 1.2, handbrakeRearGrip: 0.3, rearSlipSmokeThreshold: 0.2, rearSlipMarkThreshold: 0.16,
+    engineForce: 13000, drivetrainEfficiency: 0.95, brakeForce: 18000, frontBrakeBias: 0.6,
+    rollingResistance: 200, aeroDragCoefficient: 0.28, frontalArea: 2.3, maxForwardSpeed: 72, maxReverseSpeed: 12,
+    maxSteeringAngleLowSpeed: 0.52, maxSteeringAngleHighSpeed: 0.12, steeringFadeSpeed: 36, steeringResponse: 9,
+    countersteerAssistStrength: 0.7, countersteerStartSlip: 0.16,
+    yawDamping: 420, driveFrontShare: 0.5,
+    rollGain: 0.004, rollMax: 0.06, pitchGain: 0.003, pitchMax: 0.05,
+    gearSpeeds: [0, 20, 35, 50, 62, 72],
+    kineticGrip: 0.75, slideEnterSlip: 0.16, slideExitSlip: 0.08, slidePowerRatio: 0.9, kineticRise: 10, kineticFall: 6,
+    driftThrottleGain: 0.1, flickKick: 1.8, flickGripDrop: 0.12, flickDuration: 0.45, throttleRise: 0.05
+  }),
+  // SUV: high CG, heavy, understeer, slow, but capable off-road.
+  suv: phys({
+    mass: 2100, yawInertia: 3200, wheelbase: 2.9, cgToFrontAxle: 1.45, cgToRearAxle: 1.45, cgHeight: 0.7,
+    frontStaticLoadFraction: 0.52, rearStaticLoadFraction: 0.48,
+    frontTireB: 8.0, frontTireC: 1.25, frontTireD: 1.0, frontTireE: 0.95,
+    rearTireB: 8.0, rearTireC: 1.25, rearTireD: 1.0, rearTireE: 0.95,
+    frontGrip: 0.95, rearGrip: 0.95, handbrakeRearGrip: 0.3, rearSlipSmokeThreshold: 0.22, rearSlipMarkThreshold: 0.18,
+    engineForce: 8000, drivetrainEfficiency: 0.88, brakeForce: 15000, frontBrakeBias: 0.66,
+    rollingResistance: 220, aeroDragCoefficient: 0.45, frontalArea: 2.6, maxForwardSpeed: 58, maxReverseSpeed: 11,
+    maxSteeringAngleLowSpeed: 0.55, maxSteeringAngleHighSpeed: 0.1, steeringFadeSpeed: 28, steeringResponse: 5.5,
+    countersteerAssistStrength: 0.85, countersteerStartSlip: 0.14,
+    yawDamping: 400, driveFrontShare: 0.5,
+    rollGain: 0.014, rollMax: 0.18, pitchGain: 0.007, pitchMax: 0.12,
+    gearSpeeds: [0, 10, 19, 28, 38, 47],
+    kineticGrip: 0.68, slideEnterSlip: 0.12, slideExitSlip: 0.06, slidePowerRatio: 0.9, kineticRise: 14, kineticFall: 4,
+    driftThrottleGain: 0.15, flickKick: 2.0, flickGripDrop: 0.18, flickDuration: 0.5, throttleRise: 0.18
   })
 };
 
@@ -673,7 +741,23 @@ const DRIFT_PROFILES = {
   // Heavy long-travel desert truck: planted and predictable. Slides progressively, slow weight shift, strong yaw damping, controlled recovery.
   dakar: { driftEase: 10, corneringStiffness: 0.27, weightTransfer: 0.75, initYawKick: 0.75, maxDriftAngle: 0.8,
            counterSteerGain: 1.5, assistStartAngle: 0.15, counterSteerLead: 0.14, stability: 1.0, momentumKeep: 0.7, recoveryRate: 4.5,
-           chargeTime: 1.8, boostMinCharge: 0.45, boostForce: 0.3 }
+           chargeTime: 1.8, boostMinCharge: 0.45, boostForce: 0.3 },
+  // Muscle: loose, big angle, slow recovery, strong weight transfer.
+  muscle: { driftEase: 9, corneringStiffness: 0.22, weightTransfer: 1.3, initYawKick: 1.4, maxDriftAngle: 1.0,
+            counterSteerGain: 0.9, assistStartAngle: 0.12, counterSteerLead: 0.16, stability: 0.9, momentumKeep: 0.6, recoveryRate: 4,
+            chargeTime: 1.5, boostForce: 0.32 },
+  // Hatch: tight, quick, small angle, fast recovery.
+  hatch: { driftEase: 12, corneringStiffness: 0.3, weightTransfer: 0.8, initYawKick: 0.9, maxDriftAngle: 0.75,
+           counterSteerGain: 0.7, assistStartAngle: 0.16, counterSteerLead: 0.12, stability: 1.1, momentumKeep: 0.5, recoveryRate: 7,
+           chargeTime: 1.3, boostForce: 0.26 },
+  // EV: neutral, planted, controlled.
+  ev: { driftEase: 8, corneringStiffness: 0.26, weightTransfer: 0.9, initYawKick: 1.0, maxDriftAngle: 0.85,
+        counterSteerGain: 0.85, assistStartAngle: 0.14, counterSteerLead: 0.15, stability: 1.15, momentumKeep: 0.65, recoveryRate: 6,
+        chargeTime: 1.6, boostForce: 0.3 },
+  // SUV: heavy, slow, predictable.
+  suv: { driftEase: 7, corneringStiffness: 0.3, weightTransfer: 0.7, initYawKick: 0.7, maxDriftAngle: 0.7,
+         counterSteerGain: 1.2, assistStartAngle: 0.16, counterSteerLead: 0.13, stability: 1.2, momentumKeep: 0.6, recoveryRate: 5,
+         chargeTime: 1.8, boostMinCharge: 0.45, boostForce: 0.28 }
 };
 let driftProfile = Object.assign({}, DRIFT_DEFAULT, DRIFT_PROFILES.sport);
 const drift = {};
@@ -1091,6 +1175,60 @@ const CAR_MODELS = {
       }
 
       addWheels({ track: 0.9, frontZ: -1.25, rearZ: 1.05, radius: R, width: 0.32, rim: darkRimMaterial, barrel: orangeRimMaterial, knobs: true });
+    }
+  },
+
+  // Muscle: heavy RWD coupe with a long hood, boxy body and wide rear.
+  muscle: {
+    name: "Muscle", body: 0x7a2a1f, glass: 0x1a2a4a, physics: PHYSICS.muscle, drift: DRIFT_PROFILES.muscle,
+    exhausts: [[-0.6, 0.35, 2.2], [0.6, 0.35, 2.2]], flameRadius: 0.09,
+    build() {
+      const bw = bodyMaterial, gw = glassMaterial;
+      box(1.85, 0.55, 4.2, 0, 0.4, 0, bw);
+      box(1.5, 0.5, 1.6, 0, 0.9, -0.4, gw);
+      box(1.85, 0.12, 1.1, 0, 0.72, 1.6, bw);
+      box(0.3, 0.08, 0.6, 0, 0.7, -2.0, carbonMaterial);
+      for (const s of [-1, 1]) box(0.06, 0.4, 0.12, s * 0.78, 1.0, -0.4, bw);
+      addWheels({ track: 0.95, frontZ: -1.35, rearZ: 1.35, radius: 0.36, width: 0.32, rim: rimMaterial, barrel: darkRimMaterial, spokes: 5, spokeW: 0.07 });
+    }
+  },
+  // Hatch: compact FWD hot hatch.
+  hatch: {
+    name: "Hatch", body: 0x2a6fd6, glass: 0x182b3d, physics: PHYSICS.hatch, drift: DRIFT_PROFILES.hatch,
+    exhausts: [[0.55, 0.32, 1.9]], flameRadius: 0.07,
+    build() {
+      box(1.7, 0.5, 3.6, 0, 0.4, 0, bodyMaterial);
+      box(1.45, 0.45, 1.3, 0, 0.85, -0.2, glassMaterial);
+      box(1.7, 0.1, 0.9, 0, 0.68, 1.4, bodyMaterial);
+      box(1.5, 0.06, 0.7, 0, 1.05, -0.6, carbonMaterial);
+      for (const s of [-1, 1]) box(0.05, 0.35, 0.1, s * 0.75, 0.95, -0.2, bodyMaterial);
+      addWheels({ track: 0.85, frontZ: -1.2, rearZ: 1.2, radius: 0.32, width: 0.26, rim: whiteRimMaterial, barrel: darkRimMaterial, spokes: 5, spokeW: 0.06 });
+    }
+  },
+  // EV: sleek electric sedan.
+  ev: {
+    name: "EV", body: 0xd8ecff, glass: 0x1a2a4a, physics: PHYSICS.ev, drift: DRIFT_PROFILES.ev,
+    exhausts: [[-0.4, 0.3, 2.2], [0.4, 0.3, 2.2]], flameRadius: 0.06,
+    build() {
+      box(1.85, 0.45, 4.4, 0, 0.4, 0, bodyMaterial);
+      box(1.55, 0.5, 1.8, 0, 0.85, -0.1, glassMaterial);
+      box(1.85, 0.1, 1.2, 0, 0.68, 1.7, bodyMaterial);
+      box(1.6, 0.04, 0.9, 0, 1.08, 0.2, carbonMaterial);
+      for (const s of [-1, 1]) box(0.05, 0.4, 0.1, s * 0.8, 0.95, -0.1, bodyMaterial);
+      addWheels({ track: 0.92, frontZ: -1.4, rearZ: 1.4, radius: 0.36, width: 0.28, rim: rimMaterial, barrel: darkRimMaterial, spokes: 7, spokeW: 0.05 });
+    }
+  },
+  // SUV: high-riding utility.
+  suv: {
+    name: "SUV", body: 0x4a5a3a, glass: 0x182b3d, physics: PHYSICS.suv, drift: DRIFT_PROFILES.suv,
+    exhausts: [[0.6, 0.4, 2.0]], flameRadius: 0.08,
+    build() {
+      box(1.95, 0.65, 4.3, 0, 0.55, 0, bodyMaterial);
+      box(1.7, 0.55, 1.9, 0, 1.15, -0.2, glassMaterial);
+      box(1.95, 0.12, 1.0, 0, 0.95, 1.7, bodyMaterial);
+      box(1.95, 0.08, 0.8, 0, 1.35, -0.2, carbonMaterial);
+      for (const s of [-1, 1]) box(0.06, 0.5, 0.12, s * 0.98, 1.05, -0.2, bodyMaterial);
+      addWheels({ track: 1.0, frontZ: -1.45, rearZ: 1.45, radius: 0.4, width: 0.34, rim: darkRimMaterial, barrel: darkRimMaterial, spokes: 6, spokeW: 0.07, knobs: true });
     }
   },
 
@@ -2349,7 +2487,29 @@ const sfx = (() => {
     dakar: prof({ cat: "truck", cyl: 8, idle: 650, red: 5600, harm: 1.35, tone: 0.7, grit: 2.2, sub: 0.9, rasp: 0.2, raspHz: 1500, detune: 1.004,
       resMul: 1, resQ: 1.6, resGain: 9, rough: 0.85, lug: 1.0, gain: 1.15, rpmRise: 7, rpmFall: 3.2, loadResp: 0.6, revMatch: 0.25, shiftCut: 0.2, shiftThump: 0.2,
       pops: 0.4, popHz: [90, 420], popSharp: 0.25, popDeep: 85, bang: 0.9, stomp: 1.0, shiftBlat: 0.7,                                         // naturally aspirated: deep thumps, big exhaust bursts
-      squealGain: 0.7, roadGain: 1.3, suspGain: 1.6 })
+      squealGain: 0.7, roadGain: 1.3, suspGain: 1.6 }),
+    // MUSCLE: big V8 rumble, deep and loud, lots of sub, slow revs.
+    muscle: prof({ cat: "muscle", cyl: 8, idle: 700, red: 6200, harm: 1.4, tone: 0.65, grit: 2.6, sub: 1.0, rasp: 0.35, raspHz: 1600, detune: 1.004,
+      resMul: 1, resQ: 1.5, resGain: 8, rough: 0.8, lug: 0.9, gain: 1.2, rpmRise: 8, rpmFall: 3.5, loadResp: 0.7, revMatch: 0.3, shiftCut: 0.15, shiftThump: 0.18,
+      pops: 0.6, popHz: [120, 480], popSharp: 0.3, popDeep: 90, bang: 0.8, stomp: 0.9, shiftBlat: 0.6,
+      squealGain: 0.8, roadGain: 1.2, suspGain: 1.2 }),
+    // HATCH: buzzy four-cylinder, quick and bright.
+    hatch: prof({ cat: "hatch", cyl: 4, idle: 900, red: 7600, harm: 0.8, tone: 1.2, grit: 3.0, sub: 0.2, rasp: 0.5, raspHz: 2600, detune: 1.01,
+      resMul: 3, resQ: 2.2, resGain: 5, rough: 0.5, lug: 0.4, gain: 0.95, rpmRise: 13, rpmFall: 6, loadResp: 1.3, revMatch: 0.7, shiftCut: 0.07,
+      turbo: 0.6, spool: 2.0, spoolDown: 6, whistleLo: 2000, whistleHi: 5500, whistleGain: 0.05, whoosh: 0.4, blowoff: 0.7,
+      pops: 0.7, popHz: [400, 1600], popSharp: 0.6, popDeep: 180, bang: 0.5, stomp: 0.4, shiftBlat: 0.6,
+      squealGain: 1.0, roadGain: 1.0, suspGain: 0.9 }),
+    // EV: near-silent electric whine.
+    ev: prof({ cat: "ev", cyl: 2, idle: 400, red: 4000, harm: 0.6, tone: 1.0, grit: 0.1, sub: 0.6, rasp: 0, raspHz: 0, detune: 1.0,
+      resMul: 2, resQ: 1.0, resGain: 2, rough: 0, lug: 0, gain: 0.6, rpmRise: 20, rpmFall: 10, loadResp: 1.0, revMatch: 0, shiftCut: 0, shiftThump: 0.05,
+      turbo: 0, spool: 0, spoolDown: 0, whistleLo: 0, whistleHi: 0, whistleGain: 0, whoosh: 0.2, blowoff: 0,
+      pops: 0, popHz: [0, 0], popSharp: 0, popDeep: 0, bang: 0, stomp: 0, shiftBlat: 0,
+      squealGain: 0.9, roadGain: 0.9, suspGain: 0.8 }),
+    // SUV: gruff V6, midrange, heavy.
+    suv: prof({ cat: "truck", cyl: 6, idle: 750, red: 6000, harm: 1.2, tone: 0.75, grit: 2.0, sub: 0.7, rasp: 0.25, raspHz: 1800, detune: 1.005,
+      resMul: 1.5, resQ: 1.8, resGain: 7, rough: 0.7, lug: 0.85, gain: 1.1, rpmRise: 7, rpmFall: 3.5, loadResp: 0.7, revMatch: 0.3, shiftCut: 0.15, shiftThump: 0.16,
+      pops: 0.4, popHz: [100, 450], popSharp: 0.25, popDeep: 95, bang: 0.7, stomp: 0.85, shiftBlat: 0.5,
+      squealGain: 0.75, roadGain: 1.25, suspGain: 1.4 })
   };
 
   // ---- settings (saved) ----
